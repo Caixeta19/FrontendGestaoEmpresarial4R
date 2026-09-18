@@ -23,15 +23,23 @@ import Mailing from './pages/Mailing';
 import WhatsAppChatCRM from './pages/WhatsAppChatCRM';
 
 // Ícones da Topbar
-import { 
-  Search, 
-  Sparkles, 
-  MapPin, 
-  ChevronDown, 
-  Headphones, 
-  Smartphone, 
-  Bell 
+import {
+  Search,
+  Sparkles,
+  MapPin,
+  ChevronDown,
+  Headphones,
+  Smartphone,
+  Bell
 } from 'lucide-react';
+
+// ---------------------------------------------------------------------------
+// TOKENS DE COR (evita divergência entre containers)
+// ---------------------------------------------------------------------------
+const COR_FUNDO = '#0d0a14';
+const COR_TOPBAR = '#110d17';
+const COR_SIDEBAR = '#171124';
+const COR_BORDA = '#281d38';
 
 // ---------------------------------------------------------------------------
 // LOGO 4R SOLUTIONS
@@ -96,7 +104,8 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
   return (
     <header style={{
       height: 56,
-      background: '#110d17',
+      minHeight: 56,
+      background: COR_TOPBAR,
       borderBottom: '1px solid #231b2e',
       display: 'flex',
       alignItems: 'center',
@@ -108,11 +117,11 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
       flexShrink: 0,
       boxSizing: 'border-box'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, minWidth: 0 }}>
         <button
           type="button"
           onClick={() => setSidebarAberta(!sidebarAberta)}
-          title={sidebarAberta ? "Recolher menu lateral" : "Expandir menu lateral"}
+          title={sidebarAberta ? 'Recolher menu lateral' : 'Expandir menu lateral'}
           style={{
             background: 'transparent',
             border: 'none',
@@ -121,13 +130,14 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
             padding: 4,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            flexShrink: 0
           }}
         >
           <ToggleSidebarIcon />
         </button>
 
-        <div onClick={() => navigate('/')}>
+        <div onClick={() => navigate('/')} style={{ flexShrink: 0 }}>
           <VivoGOLogo />
         </div>
 
@@ -140,10 +150,11 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
           alignItems: 'center',
           padding: '0 16px',
           width: 320,
+          minWidth: 0,
           height: 38,
           boxSizing: 'border-box'
         }}>
-          <Search size={16} color="#94a3b8" />
+          <Search size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
           <input
             type="text"
             placeholder="Digite para buscar um módulo"
@@ -154,6 +165,7 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
               fontSize: 13,
               paddingLeft: 10,
               width: '100%',
+              minWidth: 0,
               outline: 'none',
               fontFamily: 'inherit'
             }}
@@ -161,9 +173,9 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-        <button 
-          type="button" 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        <button
+          type="button"
           title="Assistente IA"
           style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', padding: 0 }}
         >
@@ -184,20 +196,20 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
           color: '#ffffff'
         }}>
           <MapPin size={15} color="#c084fc" />
-          <span>MT</span>
+          <span>{session?.filial === 'Matriz' ? 'MT' : 'MT'}</span>
           <ChevronDown size={14} color="#94a3b8" />
         </div>
 
-        <button 
-          type="button" 
+        <button
+          type="button"
           title="Atendimento & Suporte"
           style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', padding: 0 }}
         >
           <Headphones size={19} />
         </button>
 
-        <button 
-          type="button" 
+        <button
+          type="button"
           title="Linhas e Aparelhos"
           style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', padding: 0 }}
         >
@@ -224,7 +236,7 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
           </span>
         </div>
 
-        <div 
+        <div
           onClick={() => navigate('/whatsapp-chat')}
           title="Abrir Chat WhatsApp Web"
           style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
@@ -270,14 +282,17 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
             }}
           />
 
-          <div style={{ textAlign: 'left', lineHeight: 1.15 }}>
+          <div style={{ textAlign: 'left', lineHeight: 1.15, maxWidth: 150 }}>
             <div style={{
               fontSize: 12,
               fontWeight: 800,
               color: '#ffffff',
-              letterSpacing: 0.3
+              letterSpacing: 0.3,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
             }}>
-              GUILHERME DE QUEIR...
+              {(session?.nome || 'Usuário').toUpperCase()}
             </div>
             <div style={{ fontSize: 10, color: '#c084fc', fontWeight: 600 }}>
               4 REDES
@@ -292,7 +307,8 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
 }
 
 // ---------------------------------------------------------------------------
-// LAYOUT PRIVADO (ESTRUTURA DE TELA CHEIA SEM ROLAGEM DUPLA)
+// LAYOUT PRIVADO
+// Estrutura: coluna (topbar fixa + linha [sidebar rolável | conteúdo rolável])
 // ---------------------------------------------------------------------------
 function LayoutPrivado({ session, setSession }) {
   const [sidebarAberta, setSidebarAberta] = useState(true);
@@ -305,47 +321,52 @@ function LayoutPrivado({ session, setSession }) {
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      width: '100vw',
+      width: '100%',
       height: '100vh',
       overflow: 'hidden',
-      background: '#0d0a14'
+      background: COR_FUNDO
     }}>
-      <HeaderVivoGOInternal 
-        sidebarAberta={sidebarAberta} 
-        setSidebarAberta={setSidebarAberta} 
-        session={session} 
+      <HeaderVivoGOInternal
+        sidebarAberta={sidebarAberta}
+        setSidebarAberta={setSidebarAberta}
+        session={session}
       />
 
+      {/* linha: sidebar + conteúdo. minHeight:0 permite que os filhos rolem */}
       <div style={{
         display: 'flex',
         flex: 1,
+        minHeight: 0,
         width: '100%',
-        height: 'calc(100vh - 56px)',
         overflow: 'hidden'
       }}>
         {sidebarAberta && (
-          <div style={{
+          <aside style={{
             width: 240,
             minWidth: 240,
             height: '100%',
             overflowY: 'auto',
+            overflowX: 'hidden',
             flexShrink: 0,
-            background: '#171124',
-            borderRight: '1px solid #281d38'
+            background: COR_SIDEBAR,
+            borderRight: `1px solid ${COR_BORDA}`
           }}>
             <Sidebar setSession={setSession} />
-          </div>
+          </aside>
         )}
 
+        {/* conteúdo: overflowY auto — era 'hidden', o que cortava as páginas */}
         <main style={{
           flex: 1,
-          width: 0,
-          height: '100%',
-          overflow: 'hidden',
-          background: 'var(--bg, #0d0914)',
+          minWidth: 0,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          background: COR_FUNDO,
           display: 'flex',
           flexDirection: 'column',
           padding: '24px 32px 40px',
+          boxSizing: 'border-box'
         }}>
           <Outlet context={{ session }} />
         </main>
@@ -365,9 +386,13 @@ export default function App() {
   return (
     <ToastProvider>
       <Routes>
-        <Route 
-          path="/login" 
-          element={<Login setSession={setSession} onLogin={setSession} />} 
+        <Route
+          path="/login"
+          element={
+            session
+              ? <Navigate to="/" replace />
+              : <Login setSession={setSession} onLogin={setSession} />
+          }
         />
 
         <Route element={<LayoutPrivado session={session} setSession={setSession} />}>
@@ -400,7 +425,10 @@ export default function App() {
           <Route path="/power-bi" element={<PowerBI />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route
+          path="*"
+          element={<Navigate to={session ? '/dashboard' : '/login'} replace />}
+        />
       </Routes>
     </ToastProvider>
   );
