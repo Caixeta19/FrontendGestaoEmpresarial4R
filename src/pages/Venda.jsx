@@ -580,7 +580,7 @@ export default function Venda() {
   };
 
   return (
-    <div style={{ maxWidth: 1040, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ width: '100%', maxWidth: 1400, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {mensagemSucesso && (
         <div style={{
           display: 'flex',
@@ -610,7 +610,7 @@ export default function Venda() {
         <span className="badge neutral">{status === 'ABERTA' ? 'ABERTA' : status}</span>
       </div>
 
-      <div className="panel" style={{ padding: 0, overflow: 'visible' }}>
+      <div className="panel" style={{ padding: 0, overflow: 'visible', width: '100%' }}>
         {/* Barra de Abas */}
         <div className="tabs" style={{ padding: '6px 16px 0', position: 'relative' }}>
           <button
@@ -636,13 +636,13 @@ export default function Venda() {
           })}
         </div>
 
-        <div style={{ padding: 24 }}>
+        <div style={{ padding: 28, width: '100%', boxSizing: 'border-box' }}>
           {/* ================= 1. INÍCIO ================= */}
           {abaAtiva === 'INICIO' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 560 }}>
-              <div className="field" style={{ display: 'grid', gridTemplateColumns: '130px 1fr', alignItems: 'center', gap: 12, margin: 0 }}>
-                <label style={{ margin: 0 }}>PDV:</label>
-                <select value={pdvId} onChange={(e) => setPdvId(e.target.value)}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
+              <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
+                <label style={{ margin: 0, fontWeight: 600 }}>PDV:</label>
+                <select value={pdvId} onChange={(e) => setPdvId(e.target.value)} style={{ width: '100%', maxWidth: 760 }}>
                   <option value="">Escolha ...</option>
                   {(PDVS || []).map((p) => (
                     <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>
@@ -650,9 +650,9 @@ export default function Venda() {
                 </select>
               </div>
 
-              <div className="field" style={{ display: 'grid', gridTemplateColumns: '130px 1fr', alignItems: 'center', gap: 12, margin: 0 }}>
-                <label style={{ margin: 0 }}>Vendedor:</label>
-                <select value={vendedorId} onChange={(e) => setVendedorId(e.target.value)}>
+              <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
+                <label style={{ margin: 0, fontWeight: 600 }}>Vendedor:</label>
+                <select value={vendedorId} onChange={(e) => setVendedorId(e.target.value)} style={{ width: '100%', maxWidth: 760 }}>
                   <option value="">Escolha...</option>
                   {(VENDEDORES || []).map((v) => (
                     <option key={v.id} value={v.id}>{v.nome}</option>
@@ -660,11 +660,12 @@ export default function Venda() {
                 </select>
               </div>
 
-              <div className="field" style={{ display: 'grid', gridTemplateColumns: '130px 1fr', alignItems: 'start', gap: 12, margin: 0 }}>
-                <label style={{ marginTop: 10 }}>Cliente:</label>
-                <div style={{ position: 'relative', width: '100%' }}>
+              <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'start', gap: 16, margin: 0 }}>
+                <label style={{ marginTop: 10, fontWeight: 600 }}>Cliente:</label>
+                <div style={{ position: 'relative', width: '100%', maxWidth: 760 }}>
                   <input
                     type="text"
+                    style={{ width: '100%' }}
                     placeholder="Buscar por Nome ou CPF/CNPJ..."
                     value={cliente ? `${cliente.nome} - ${cliente.doc || cliente.documento || cliente.cpf || cliente.cnpj}` : buscaCliente}
                     onChange={(e) => {
@@ -723,12 +724,12 @@ export default function Venda() {
                 </div>
               </div>
 
-              <fieldset style={{ borderRadius: 6, padding: 16, marginTop: 12, border: '1px solid var(--line)' }}>
-                <legend style={{ padding: '0 6px', color: 'var(--text-dim)', fontSize: 13, fontWeight: 600 }}>
+              <fieldset style={{ borderRadius: 6, padding: '18px 24px', marginTop: 12, border: '1px solid var(--line)', width: '100%', maxWidth: 760, boxSizing: 'border-box' }}>
+                <legend style={{ padding: '0 8px', color: 'var(--text-dim)', fontSize: 13, fontWeight: 600 }}>
                   Autenticação do vendedor:
                 </legend>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 12, margin: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
                     <label style={{ margin: 0 }}>E-mail / Login:</label>
                     <input
                       type="text"
@@ -737,7 +738,7 @@ export default function Venda() {
                       onChange={(e) => setEmailLogin(e.target.value)}
                     />
                   </div>
-                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: 12, margin: 0 }}>
+                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
                     <label style={{ margin: 0 }}>Senha:</label>
                     <input
                       type="password"
@@ -798,7 +799,7 @@ export default function Venda() {
                     <X size={20} />
                   </button>
 
-                  {/* 1. Aparelho/Serviços - Campos Alinhados */}
+                  {/* 1. Aparelho/Serviços */}
                   <fieldset style={{ 
                     border: '1px solid var(--line, #e2e8f0)', 
                     borderRadius: 8, 
@@ -814,7 +815,7 @@ export default function Venda() {
                     {/* Serial */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Serial:</label>
-                      <div style={{ position: 'relative', width: '100%', maxWidth: 440 }}>
+                      <div style={{ position: 'relative', width: '100%', maxWidth: 540 }}>
                         <input
                           type="text"
                           placeholder="Digite ou bipe o IMEI/Serial..."
@@ -944,7 +945,7 @@ export default function Venda() {
                     {/* Serviço */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Serviço:</label>
-                      <div style={{ display: 'flex', gap: 8, maxWidth: 440 }}>
+                      <div style={{ display: 'flex', gap: 8, maxWidth: 540 }}>
                         <select
                           value={formProdutoVivo.segmento}
                           onChange={(e) => setFormProdutoVivo((p) => ({ ...p, segmento: e.target.value }))}
@@ -988,7 +989,7 @@ export default function Venda() {
                     {/* Plano Ativo / Linha */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Plano Ativo / Linha:</label>
-                      <div style={{ display: 'flex', gap: 8, maxWidth: 440 }}>
+                      <div style={{ display: 'flex', gap: 8, maxWidth: 540 }}>
                         <select
                           value={formProdutoVivo.ddd}
                           onChange={(e) => setFormProdutoVivo((p) => ({ ...p, ddd: e.target.value }))}
@@ -1044,7 +1045,7 @@ export default function Venda() {
                     </div>
                   </fieldset>
 
-                  {/* 2. Valores - Campos Alinhados */}
+                  {/* 2. Valores */}
                   <fieldset style={{ 
                     border: '1px solid var(--line, #e2e8f0)', 
                     borderRadius: 8, 
@@ -1161,7 +1162,7 @@ export default function Venda() {
                     </div>
                   </fieldset>
 
-                  {/* 3. Linha - Campos Alinhados */}
+                  {/* 3. Linha */}
                   <fieldset style={{ 
                     border: '1px solid var(--line, #e2e8f0)', 
                     borderRadius: 8, 
@@ -1183,7 +1184,7 @@ export default function Venda() {
                         value={formProdutoVivo.numeroLinha}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, numeroLinha: e.target.value }))}
                         style={{
-                          width: 220,
+                          width: 240,
                           height: 34,
                           padding: '0 10px',
                           fontSize: 13,
@@ -1203,7 +1204,7 @@ export default function Venda() {
                         value={formProdutoVivo.sistemaOrigem}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, sistemaOrigem: e.target.value }))}
                         style={{
-                          width: 220,
+                          width: 240,
                           height: 34,
                           padding: '0 8px',
                           fontSize: 13,
@@ -1229,7 +1230,7 @@ export default function Venda() {
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, numOrdemNext: e.target.value }))}
                         placeholder="Digite o número da ordem..."
                         style={{
-                          width: 220,
+                          width: 240,
                           height: 34,
                           padding: '0 10px',
                           fontSize: 13,
@@ -1251,7 +1252,7 @@ export default function Venda() {
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, numSolicitacaoGed: e.target.value }))}
                         placeholder="Digite o número da solicitação..."
                         style={{
-                          width: 300,
+                          width: 320,
                           height: 34,
                           padding: '0 10px',
                           fontSize: 13,
@@ -1350,7 +1351,7 @@ export default function Venda() {
           {/* ================= 3. SERVIÇO VIVO ================= */}
           {abaAtiva === 'SERVICO_VIVO' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <form onSubmit={handleAdicionarServicoVivo} style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 740 }}>
+              <form onSubmit={handleAdicionarServicoVivo} style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 840 }}>
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                   <label style={{ margin: 0 }}>Serviço:</label>
                   <select
@@ -1436,7 +1437,7 @@ export default function Venda() {
                   <label style={{ margin: 0 }}>Número da linha:</label>
                   <input
                     type="text"
-                    style={{ maxWidth: 220 }}
+                    style={{ maxWidth: 260 }}
                     placeholder="Ex: 99437-3977"
                     value={servicoForm.numeroLinha}
                     onChange={(e) => setServicoForm((prev) => ({ ...prev, numeroLinha: e.target.value }))}
@@ -1450,7 +1451,7 @@ export default function Venda() {
                         <label style={{ margin: 0, fontSize: 13 }}>Simcard 3G (Antigo):</label>
                         <input
                           type="text"
-                          style={{ maxWidth: 260 }}
+                          style={{ maxWidth: 280 }}
                           placeholder="ICCID antigo..."
                           value={servicoForm.simcard3g}
                           onChange={(e) => setServicoForm((prev) => ({ ...prev, simcard3g: e.target.value }))}
@@ -1495,7 +1496,7 @@ export default function Venda() {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <input
                               type="text"
-                              style={{ maxWidth: 260 }}
+                              style={{ maxWidth: 280 }}
                               placeholder="Digite ou bipe o ICCID..."
                               value={servicoForm.simcard4g}
                               onChange={(e) => setServicoForm((prev) => ({ ...prev, simcard4g: e.target.value, serialConfirmado: false }))}
@@ -1546,7 +1547,7 @@ export default function Venda() {
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                   <label style={{ margin: 0 }}>Sistema de Origem:</label>
                   <select
-                    style={{ maxWidth: 220 }}
+                    style={{ maxWidth: 260 }}
                     value={servicoForm.sistemaOrigem}
                     onChange={(e) => setServicoForm((prev) => ({ ...prev, sistemaOrigem: e.target.value }))}
                   >
@@ -1625,7 +1626,7 @@ export default function Venda() {
           {/* ================= 4. ACESSÓRIO ================= */}
           {abaAtiva === 'ACESSORIO' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <form onSubmit={handleAdicionarAcessorio} style={{ display: 'flex', gap: 12, alignItems: 'flex-end', maxWidth: 640 }}>
+              <form onSubmit={handleAdicionarAcessorio} style={{ display: 'flex', gap: 12, alignItems: 'flex-end', maxWidth: 840 }}>
                 <div style={{ flex: 1, position: 'relative' }}>
                   <label style={{ display: 'block', fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 6 }}>
                     Buscar Acessório (Capa, Película, Cabo, Fone):
@@ -1743,7 +1744,7 @@ export default function Venda() {
           {/* ================= 5. PAGAMENTO ================= */}
           {abaAtiva === 'PAGAMENTO' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <form onSubmit={handleAdicionarPagamento} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 620 }}>
+              <form onSubmit={handleAdicionarPagamento} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 840 }}>
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                   <label style={{ margin: 0, fontWeight: 600 }}>Valor total:</label>
                   <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--good)' }}>
@@ -1789,7 +1790,7 @@ export default function Venda() {
                     <input
                       type="number"
                       step="0.01"
-                      style={{ maxWidth: 180 }}
+                      style={{ maxWidth: 220 }}
                       placeholder="0,00"
                       value={pgtoForm.valor}
                       onChange={(e) => setPgtoForm((prev) => ({ ...prev, valor: e.target.value }))}
@@ -1861,8 +1862,10 @@ export default function Venda() {
         alignItems: 'center',
         background: 'var(--panel)',
         border: '1px solid var(--line)',
-        padding: '16px 20px',
-        borderRadius: 8
+        padding: '16px 24px',
+        borderRadius: 8,
+        width: '100%',
+        boxSizing: 'border-box'
       }}>
         <div style={{ color: 'var(--text-dim)', fontSize: 13.5 }}>
           <div>
@@ -1875,7 +1878,7 @@ export default function Venda() {
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <div style={{ textAlign: 'right' }}>
             <span style={{ fontSize: 11.5, color: 'var(--text-faint)', display: 'block' }}>Total a pagar no caixa</span>
             <span className="mono" style={{ fontSize: 22, fontWeight: 700, color: 'var(--good)' }}>
@@ -1888,7 +1891,7 @@ export default function Venda() {
             onClick={handleFinalizarVenda}
             disabled={totalItensCarrinho === 0 || carregando}
             className="btn solid"
-            style={{ padding: '10px 22px', fontSize: 14 }}
+            style={{ padding: '12px 26px', fontSize: 14 }}
           >
             {carregando ? 'A gravar venda...' : 'Finalizar venda'}
           </button>
