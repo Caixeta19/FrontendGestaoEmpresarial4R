@@ -39,15 +39,15 @@ const LISTA_MOTIVOS_CANCELAMENTO = [
 
 const LISTA_DIAS_VENCIMENTO = ['01', '06', '10', '15', '17', '21', '26', '28'];
 
-// Estilo padronizado com bordas visíveis e fundo nítido
 const inputStyleVisivel = {
   background: 'var(--panel-2, #181329)',
   border: '1px solid var(--line, #475569)',
   color: 'var(--text, #f1eef7)',
   borderRadius: '6px',
   outline: 'none',
-  padding: '6px 10px',
-  transition: 'border-color 0.15s ease'
+  padding: '8px 12px',
+  transition: 'border-color 0.15s ease',
+  boxSizing: 'border-box'
 };
 
 export default function Documental() {
@@ -102,8 +102,35 @@ export default function Documental() {
     if (mensagemErro) setMensagemErro('');
   };
 
+  const handleIniciarNovoRegistro = () => {
+    setFormData({
+      vendaId: String(Date.now()).slice(-6),
+      quantidade: 1,
+      servico: 'Alta - Controle',
+      plano: 'Plano Vivo Controle',
+      cliente: 'Consumidor Final',
+      vendedor: 'VENDEDOR DA LOJA',
+      dataVenda: new Date().toLocaleDateString('pt-BR'),
+      numeroAcesso: '',
+      dataAtivacao: new Date().toISOString().split('T')[0],
+      zerarRemuneracao: 'nao',
+      gerarPrice: 'sim',
+      dataDigitalizacao: '',
+      numeroProtocoloGed: '',
+      vencimento: '17',
+      statusBko: 'Nao avaliado',
+      liderEquipe: '',
+      observacoes: '',
+      observacoesImportacao: '',
+      situacaoServico: 'Confirmado',
+      gerarComissao: 'Sim',
+      motivosCancelamento: []
+    });
+    setEtapa('DETALHE');
+  };
+
   // ==========================================================================
-  // BUSCA DINÂMICA: PUXA A VENDA REAL DIGITADA SEM FIXAR NÚMEROS ESTÁTICOS
+  // BUSCA DINÂMICA COM TRATAMENTO PRECISO DE SERVIÇO, PLANO E LINHA
   // ==========================================================================
   const handleExecutarBusca = async (e) => {
     e.preventDefault();
@@ -119,7 +146,6 @@ export default function Documental() {
 
     let vendaEncontrada = null;
 
-    // 1. Tenta buscar da API do Backend primeiro
     try {
       const res = await fetch('http://localhost:8080/api/v1/vendas');
       if (res.ok) {
@@ -131,9 +157,7 @@ export default function Documental() {
 
           if (acessoDigitado && v.itens) {
             return v.itens.some(item =>
-              // Inclui também o campo real de telefone/MSISDN do item,
-              // não apenas serial/IMEI, para que a busca por Nº de Acesso encontre a venda.
-              String(item.numeroAcesso || item.telefone || item.msisdn || item.serialImei || item.imeiOuSerial || '')
+              String(item.numeroAcesso || item.telefone || item.msisdn || item.linha || '')
                 .replace(/\D/g, '')
                 .includes(acessoDigitado)
             );
@@ -142,10 +166,9 @@ export default function Documental() {
         });
       }
     } catch {
-      // Ignora erro de rede e tenta buscar localmente
+      // Ignora e tenta local
     }
 
-    // 2. Se não achou na API, busca no localStorage local (syscor_vendas / syscor_protocolos)
     if (!vendaEncontrada) {
       const vendasLocais = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
       const protocolosSalvos = JSON.parse(localStorage.getItem('syscor_protocolos') || '{}');
@@ -163,55 +186,67 @@ export default function Documental() {
       });
     }
 
-    // 3. SE ENCONTROU A VENDA REAL: Mapeia dinamicamente os dados reais dela
     if (vendaEncontrada) {
-      // Prioriza o item de SERVICO_VIVO (se existir) para preencher Serviço/Plano/Linha,
-      // em vez de assumir que o primeiro item do array é sempre o serviço.
       const itens = vendaEncontrada.itens || [];
-      const itemServico = itens.find((it) => it.categoria === 'SERVICO_VIVO') || itens[0] || {};
-      const detalhesItem = itemServico.detalhes || {};
+      
+      // Procura primeiro item de serviço; se não tiver, pega o de produto
+      const itemServico = itens.find(it => it.categoria === 'SERVICO_VIVO');
+      const itemProduto = itens.find(it => it.categoria === 'PRODUTO_VIVO');
+      const itemGenerico = itens[0] || {};
 
-      // Serviço: usa o nome limpo salvo em detalhes.servico (ex: "Migração").
-      // Antes caía em item.categoria, que é a string interna "SERVICO_VIVO".
-      const servicoFormatado = detalhesItem.servico || itemServico.categoria || 'Alta - Pós';
+      // 1. Serviço:
+      let servicoFormatado = 'Venda Avulsa';
+      if (itemServico?.detalhes?.servico) {
+        servicoFormatado = itemServico.detalhes.servico;
+      } else if (itemProduto) {
+        servicoFormatado = itemProduto.detalhes?.servico || 'Venda de Aparelho';
+      } else if (itemServico) {
+        servicoFormatado = 'Serviço Vivo';
+      }
 
-      // Plano: usa SOMENTE o plano novo/contratado (detalhes.planoNovo).
-      // Antes caía em item.descricao, que é a string completa da transição
-      // "Migração: [Plano Antigo] ➔ [Plano Novo]".
-      const planoFormatado = detalhesItem.planoNovo || itemServico.descricao || 'Plano Vivo Oficial';
+      // 2. Plano:
+      let planoFormatado = 'Sem Plano Vinculado';
+      if (itemServico?.detalhes?.planoNovo) {
+        planoFormatado = itemServico.detalhes.planoNovo;
+      } else if (itemProduto?.detalhes?.planoAtivo) {
+        planoFormatado = itemProduto.detalhes.planoAtivo;
+      } else if (itemProduto) {
+        planoFormatado = `Aparelho: ${itemProduto.descricao}`;
+      } else if (itemGenerico.descricao) {
+        planoFormatado = itemGenerico.descricao;
+      }
 
-      // Cliente: em Venda.jsx o campo "cliente" é salvo como STRING (nome), não objeto.
-      // Antes o código tentava vendaEncontrada.cliente.nome, que é sempre undefined
-      // porque .cliente já É a string — daí caía sempre em "Cliente Não Informado".
-      const clienteNome = vendaEncontrada.cliente || null;
-      const clienteDocumento =
-        vendaEncontrada.clienteDoc && vendaEncontrada.clienteDoc !== '—'
-          ? vendaEncontrada.clienteDoc
-          : null;
+      // 3. Cliente:
+      const clienteNome = vendaEncontrada.cliente || 'Cliente Balcão';
+      const clienteDoc = vendaEncontrada.clienteDoc && vendaEncontrada.clienteDoc !== '—' 
+        ? ` - CPF: ${vendaEncontrada.clienteDoc}` 
+        : '';
+      const clienteFormatado = `${clienteNome}${clienteDoc}`;
 
-      const clienteFormatado = clienteNome
-        ? (clienteDocumento ? `${clienteNome} - CPF: ${clienteDocumento}` : clienteNome)
-        : 'Cliente Não Informado';
+      // 4. Vendedor:
+      const vendedorReal = 
+        vendaEncontrada.vendedorNome || 
+        vendaEncontrada.usuario?.nome || 
+        vendaEncontrada.vendedor || 
+        'Vendedor Não Identificado';
 
-      // Vendedor: usa o vendedor que efetivamente lançou a venda (usuário logado
-      // no momento do lançamento) e nunca é alterado depois — ver campo fixo na tela de detalhe.
-      const vendedorReal =
-        (vendaEncontrada.usuario && (vendaEncontrada.usuario.nome || vendaEncontrada.usuario.login)) ||
-        vendaEncontrada.vendedorNome ||
-        vendaEncontrada.vendedorIdentificacao ||
-        'VENDEDOR DA FILIAL';
-
-      // Número de acesso: prioriza a linha já formatada salva em detalhes.linha
-      // (ex: "(61) 99437-3977"), que é o dado correto gravado no momento da venda.
-      // NUNCA usar serialImei/imeiOuSerial aqui — esses são o IMEI do aparelho,
-      // não o número de acesso (telefone) da linha.
-      const numeroAcessoReal =
-        filtrosBusca.numeroAcesso ||
-        detalhesItem.linha ||
-        itemServico.numeroAcesso ||
-        itemServico.telefone ||
-        itemServico.msisdn ||
-        '';
+      // 5. Número de Acesso:
+      let numeroAcessoReal = filtrosBusca.numeroAcesso || '';
+      if (!numeroAcessoReal) {
+        if (itemServico?.detalhes?.linha) {
+          numeroAcessoReal = itemServico.detalhes.linha;
+        } else if (itemProduto?.detalhes?.numeroLinha) {
+          numeroAcessoReal = itemProduto.detalhes.numeroLinha;
+        } else if (itemServico?.numeroLinha) {
+          numeroAcessoReal = itemServico.numeroLinha;
+        } else if (itemProduto?.numeroLinha && itemProduto.numeroLinha !== 'S/N') {
+          numeroAcessoReal = itemProduto.numeroLinha;
+        }
+      }
+      // Se tiver caído valor como "S" ou "S/N", limpa
+      if (numeroAcessoReal === 'S' || numeroAcessoReal === 'S/N') {
+        numeroAcessoReal = '';
+      }
 
       setFormData({
         vendaId: vendaEncontrada.numeroVenda || vendaEncontrada.numeroPedido || String(vendaEncontrada.id),
@@ -243,7 +278,6 @@ export default function Documental() {
       return;
     }
 
-    // 4. Se não encontrar, avisa o operador
     setMensagemErro(`A venda "${vendaDigitada || filtrosBusca.numeroAcesso}" não foi encontrada no banco de dados.`);
   };
 
@@ -282,120 +316,106 @@ export default function Documental() {
   };
 
   /* ==========================================================================
-     1. TELA DE MENU PRINCIPAL (2 CARDS)
+     1. TELA INICIAL: CARDS HORIZONTAIS
      ========================================================================== */
   if (etapa === 'MENU') {
     return (
-      <div style={{ maxWidth: 720, margin: '40px auto 0', display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-          <div style={{ width: 8, height: 16, background: 'var(--accent, #c026d3)', borderRadius: 2, marginTop: 4 }} />
+      <div style={{ width: '100%', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 16, boxSizing: 'border-box' }}>
+        
+        {/* Card 1: Inserir Registro */}
+        <div style={{
+          background: '#0d0a18',
+          border: '1px solid #231b38',
+          borderRadius: 12,
+          padding: '20px 28px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--text, #fff)' }}>
-              Gestão Documental
-            </h1>
-            <p style={{ margin: '4px 0 0', color: 'var(--text-faint, #8c85a6)', fontSize: 13.5 }}>
-              Preenchimento do número de protocolo de aprovação de contrato.
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 4, height: 18, background: '#c026d3', borderRadius: 2 }} />
+              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#ffffff' }}>Inserir Registro</h2>
+            </div>
+            <p style={{ margin: '6px 0 0 12px', color: '#94a3b8', fontSize: 13 }}>
+              Inclusão de número de protocolo e validação de contratos de vendas.
             </p>
           </div>
+
+          <button
+            type="button"
+            onClick={handleIniciarNovoRegistro}
+            style={{
+              background: '#120c24',
+              border: '1px solid #332752',
+              borderRadius: 20,
+              color: '#ffffff',
+              padding: '8px 24px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#281c47'; e.currentTarget.style.borderColor = '#c026d3'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#120c24'; e.currentTarget.style.borderColor = '#332752'; }}
+          >
+            <PlusCircle size={15} color="#22c55e" />
+            <span>Inserir</span>
+          </button>
         </div>
 
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: '1fr 1fr', 
-          gap: 20, 
-          padding: 28, 
-          background: 'var(--panel, #181329)', 
-          border: '1px solid var(--line, #332a4d)', 
-          borderRadius: 12 
+        {/* Card 2: Buscar Registro */}
+        <div style={{
+          background: '#0d0a18',
+          border: '1px solid #231b38',
+          borderRadius: 12,
+          padding: '20px 28px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          width: '100%',
+          boxSizing: 'border-box'
         }}>
-          <div 
-            onClick={() => {
-              setFormData({
-                vendaId: String(Date.now()).slice(-6),
-                quantidade: 1,
-                servico: 'Alta - Controle',
-                plano: 'Plano Vivo Controle',
-                cliente: 'Consumidor Final',
-                vendedor: 'VENDEDOR DA LOJA',
-                dataVenda: new Date().toLocaleDateString('pt-BR'),
-                numeroAcesso: '',
-                dataAtivacao: new Date().toISOString().split('T')[0],
-                zerarRemuneracao: 'nao',
-                gerarPrice: 'sim',
-                dataDigitalizacao: '',
-                numeroProtocoloGed: '',
-                vencimento: '17',
-                statusBko: 'Nao avaliado',
-                liderEquipe: '',
-                observacoes: '',
-                observacoesImportacao: '',
-                situacaoServico: 'Confirmado',
-                gerarComissao: 'Sim',
-                motivosCancelamento: []
-              });
-              setEtapa('DETALHE');
-            }}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 16,
-              padding: '44px 20px',
-              borderRadius: 10,
-              border: '1px solid var(--line, #332a4d)',
-              background: 'var(--panel-2, #211c38)',
-              cursor: 'pointer'
-            }}
-          >
-            <div style={{
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: 'rgba(192, 38, 211, 0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent, #c026d3)'
-            }}>
-              <PlusCircle size={28} />
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 4, height: 18, background: '#c026d3', borderRadius: 2 }} />
+              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#ffffff' }}>Buscar Registro</h2>
             </div>
-            <b style={{ fontSize: 15, color: 'var(--text, #fff)' }}>Inserir Registro</b>
+            <p style={{ margin: '6px 0 0 12px', color: '#94a3b8', fontSize: 13 }}>
+              Pesquisa avançada de vendas para conferência e edição de protocolo documental.
+            </p>
           </div>
 
-          <div 
-            onClick={() => {
-              setMensagemErro('');
-              setEtapa('BUSCA');
-            }}
+          <button
+            type="button"
+            onClick={() => { setMensagemErro(''); setEtapa('BUSCA'); }}
             style={{
+              background: '#120c24',
+              border: '1px solid #332752',
+              borderRadius: 20,
+              color: '#ffffff',
+              padding: '8px 24px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-              gap: 16,
-              padding: '44px 20px',
-              borderRadius: 10,
-              border: '1px solid var(--line, #332a4d)',
-              background: 'var(--panel-2, #211c38)',
-              cursor: 'pointer'
+              gap: 8,
+              transition: 'all 0.15s ease'
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#281c47'; e.currentTarget.style.borderColor = '#c026d3'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#120c24'; e.currentTarget.style.borderColor = '#332752'; }}
           >
-            <div style={{
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: 'rgba(192, 38, 211, 0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent, #c026d3)'
-            }}>
-              <Search size={28} />
-            </div>
-            <b style={{ fontSize: 15, color: 'var(--text, #fff)' }}>Buscar Registro</b>
-          </div>
+            <Search size={15} color="#c026d3" />
+            <span>Buscar</span>
+          </button>
         </div>
+
       </div>
     );
   }
@@ -405,7 +425,7 @@ export default function Documental() {
      ========================================================================== */
   if (etapa === 'BUSCA') {
     return (
-      <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ width: '100%', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 18, boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Search size={22} color="var(--accent, #c026d3)" />
@@ -442,14 +462,14 @@ export default function Documental() {
           </div>
         )}
 
-        <form onSubmit={handleExecutarBusca} className="panel" style={{ padding: 24, border: '1px solid var(--line, #332a4d)' }}>
+        <form onSubmit={handleExecutarBusca} className="panel" style={{ padding: 28, width: '100%', boxSizing: 'border-box', border: '1px solid var(--line, #332a4d)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--good, #22c55e)', marginBottom: 20 }}>
             <ChevronRight size={18} strokeWidth={3} />
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Filtros Principais</h3>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Filtros Principais</h3>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="field" style={{ margin: 0 }}>
                 <label>Período da Venda:</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -474,7 +494,7 @@ export default function Documental() {
                 <select 
                   value={filtrosBusca.pdv} 
                   onChange={(e) => handleFiltroChange('pdv', e.target.value)}
-                  style={{ ...inputStyleVisivel, width: '100%', height: 34 }}
+                  style={{ ...inputStyleVisivel, width: '100%', height: 36 }}
                 >
                   <option value="TODOS">Todos</option>
                   {(PDVS || []).map(p => (
@@ -488,7 +508,7 @@ export default function Documental() {
                 <select 
                   value={filtrosBusca.vendedor} 
                   onChange={(e) => handleFiltroChange('vendedor', e.target.value)}
-                  style={{ ...inputStyleVisivel, width: '100%', height: 34 }}
+                  style={{ ...inputStyleVisivel, width: '100%', height: 36 }}
                 >
                   <option value="TODOS">Todos</option>
                   {(VENDEDORES || []).map(v => (
@@ -504,7 +524,7 @@ export default function Documental() {
                   placeholder="Ex: 000487" 
                   value={filtrosBusca.numeroVenda}
                   onChange={(e) => handleFiltroChange('numeroVenda', e.target.value)}
-                  style={{ ...inputStyleVisivel, maxWidth: 260, height: 34 }}
+                  style={{ ...inputStyleVisivel, width: '100%', height: 36 }}
                 />
               </div>
 
@@ -515,23 +535,12 @@ export default function Documental() {
                   placeholder="Número 360..." 
                   value={filtrosBusca.numeroSolicitacao360}
                   onChange={(e) => handleFiltroChange('numeroSolicitacao360', e.target.value)}
-                  style={{ ...inputStyleVisivel, maxWidth: 260, height: 34 }}
-                />
-              </div>
-
-              <div className="field" style={{ margin: 0 }}>
-                <label>Nº Portabilidade:</label>
-                <input 
-                  type="text" 
-                  placeholder="Portabilidade..." 
-                  value={filtrosBusca.numeroPortabilidade}
-                  onChange={(e) => handleFiltroChange('numeroPortabilidade', e.target.value)}
-                  style={{ ...inputStyleVisivel, maxWidth: 260, height: 34 }}
+                  style={{ ...inputStyleVisivel, width: '100%', height: 36 }}
                 />
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="field" style={{ margin: 0 }}>
                 <label>Data Agendada de Instalação:</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -555,14 +564,12 @@ export default function Documental() {
                 <label>Líder de Equipe:</label>
                 <input 
                   type="text" 
-                  placeholder="Digite o líder de equipe..."
+                  placeholder="Digite o líder de equipe..." 
                   value={filtrosBusca.liderEquipe}
                   onChange={(e) => handleFiltroChange('liderEquipe', e.target.value)}
-                  style={{ ...inputStyleVisivel, width: '100%', height: 34 }}
+                  style={{ ...inputStyleVisivel, width: '100%', height: 36 }}
                 />
               </div>
-
-              <div style={{ height: 50 }} />
 
               <div className="field" style={{ margin: 0 }}>
                 <label>Nº Protocolo GED:</label>
@@ -571,7 +578,7 @@ export default function Documental() {
                   placeholder="Ex: 472092420" 
                   value={filtrosBusca.numeroProtocoloGed}
                   onChange={(e) => handleFiltroChange('numeroProtocoloGed', e.target.value)}
-                  style={{ ...inputStyleVisivel, maxWidth: 260, height: 34 }}
+                  style={{ ...inputStyleVisivel, width: '100%', height: 36 }}
                 />
               </div>
 
@@ -582,13 +589,24 @@ export default function Documental() {
                   placeholder="DDD + Número" 
                   value={filtrosBusca.numeroAcesso}
                   onChange={(e) => handleFiltroChange('numeroAcesso', e.target.value)}
-                  style={{ ...inputStyleVisivel, maxWidth: 260, height: 34 }}
+                  style={{ ...inputStyleVisivel, width: '100%', height: 36 }}
+                />
+              </div>
+
+              <div className="field" style={{ margin: 0 }}>
+                <label>Nº Portabilidade:</label>
+                <input 
+                  type="text" 
+                  placeholder="Portabilidade..." 
+                  value={filtrosBusca.numeroPortabilidade}
+                  onChange={(e) => handleFiltroChange('numeroPortabilidade', e.target.value)}
+                  style={{ ...inputStyleVisivel, width: '100%', height: 36 }}
                 />
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--line, #332a4d)' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 28, paddingTop: 16, borderTop: '1px solid var(--line, #332a4d)' }}>
             <button 
               type="button" 
               className="btn sm ghost"
@@ -616,7 +634,7 @@ export default function Documental() {
             <button 
               type="submit" 
               className="btn sm solid"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 20px' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 24px' }}
             >
               <Search size={15} /> Pesquisar Serviços
             </button>
@@ -627,17 +645,28 @@ export default function Documental() {
   }
 
   /* ==========================================================================
-     3. TELA DE EDIÇÃO DO PROTOCOLO VINCULADO À VENDA REAL
+     3. TELA DE ANÁLISE / EDIÇÃO (SEM LIMITAÇÃO DE ALTURA/LARGURA)
      ========================================================================== */
   return (
-    <div style={{ maxWidth: 1240, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14, width: '100%' }}>
+    <div style={{ width: '100%', padding: '16px 20px 40px', display: 'flex', flexDirection: 'column', gap: 14, boxSizing: 'border-box' }}>
       
       {/* Topbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
-        <FileEdit size={20} color="var(--accent, #c026d3)" />
-        <h1 style={{ fontSize: 19, fontWeight: 700, margin: 0, color: 'var(--accent, #c026d3)' }}>
-          Edição de Número de Protocolo - Venda #{formData.vendaId}
-        </h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <FileEdit size={22} color="var(--accent, #c026d3)" />
+          <h1 style={{ fontSize: 21, fontWeight: 700, margin: 0, color: 'var(--accent, #c026d3)' }}>
+            Análise e Edição de Protocolo - Venda #{formData.vendaId}
+          </h1>
+        </div>
+
+        <button 
+          type="button" 
+          className="btn sm ghost"
+          onClick={() => setEtapa('BUSCA')}
+          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          <ArrowLeft size={14} /> Voltar à Busca
+        </button>
       </div>
 
       <form 
@@ -645,31 +674,32 @@ export default function Documental() {
         className="panel" 
         style={{ 
           padding: 0, 
-          overflow: 'hidden', 
           display: 'flex', 
           flexDirection: 'column', 
           background: 'var(--panel, #181329)', 
-          border: '1px solid var(--line, #332a4d)' 
+          border: '1px solid var(--line, #332a4d)',
+          width: '100%',
+          boxSizing: 'border-box'
         }}
       >
         {/* Quantidade */}
         <div style={{ 
-          padding: '10px 18px', 
+          padding: '12px 24px', 
           display: 'flex', 
           alignItems: 'center', 
           gap: 6, 
           fontWeight: 700, 
-          fontSize: 14, 
+          fontSize: 15, 
           color: 'var(--good, #22c55e)' 
         }}>
-          <ChevronRight size={17} strokeWidth={3} />
+          <ChevronRight size={18} strokeWidth={3} />
           <span>Quantidade ({formData.quantidade})</span>
         </div>
 
         {/* Faixa Remover Item */}
         <div style={{ 
           background: 'rgba(225, 29, 72, 0.12)', 
-          padding: '8px 18px', 
+          padding: '10px 24px', 
           borderTop: '1px solid rgba(225, 29, 72, 0.3)', 
           borderBottom: '1px solid rgba(225, 29, 72, 0.3)', 
           display: 'flex', 
@@ -685,65 +715,60 @@ export default function Documental() {
               border: 'none', 
               color: 'var(--bad, #ef4444)', 
               fontWeight: 600, 
-              fontSize: 12.5, 
+              fontSize: 13, 
               cursor: 'pointer' 
             }}
             onClick={() => alert(`Item da venda ${formData.vendaId} removido da conferência.`)}
           >
-            <XSquare size={15} />
+            <XSquare size={16} />
             Remover item
           </button>
         </div>
 
-        {/* Campos em 2 Colunas */}
-        <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Informações da Venda */}
+        <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 18, width: '100%', boxSizing: 'border-box' }}>
           
           {/* LINHA 1 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'start' }}>
             <div>
               <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Serviço:</div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', marginTop: 2 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginTop: 4 }}>
                 {formData.servico}
               </div>
             </div>
 
             <div>
               <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Plano:</div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', marginTop: 2 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginTop: 4 }}>
                 {formData.plano}
               </div>
             </div>
           </div>
 
           {/* LINHA 2 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Cliente:</div>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', marginTop: 2 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 4 }}>
                 {formData.cliente}
               </div>
             </div>
 
-            {/*
-              Vendedor é somente leitura (texto fixo), igual ao Cliente.
-              O valor vem de formData.vendedor, preenchido a partir da venda real
-              no handleExecutarBusca e nunca mais alterado nesta tela.
-            */}
             <div>
               <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Vendedor:</div>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', marginTop: 2 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 4 }}>
                 {formData.vendedor}
               </div>
             </div>
           </div>
 
-          <hr style={{ borderColor: 'var(--line-soft, #2a2340)', margin: '4px 0' }} />
+          <hr style={{ borderColor: 'var(--line-soft, #2a2340)', margin: '6px 0' }} />
 
           {/* LINHA 3 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'start' }}>
             <div>
               <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Data da Venda:</div>
-              <div className="mono" style={{ fontSize: 13.5, color: 'var(--text)', marginTop: 2 }}>
+              <div className="mono" style={{ fontSize: 14, color: 'var(--text)', marginTop: 4 }}>
                 {formData.dataVenda}
               </div>
             </div>
@@ -752,12 +777,12 @@ export default function Documental() {
               <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Ativação da Primeira Chamada:</div>
               <div style={{ 
                 color: 'var(--bad, #ef4444)', 
-                fontSize: 12.5, 
+                fontSize: 13, 
                 fontWeight: 600, 
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: 6, 
-                marginTop: 2 
+                marginTop: 4 
               }}>
                 Não foi feita a primeira ligação na central SysCor deste serviço
               </div>
@@ -765,33 +790,34 @@ export default function Documental() {
           </div>
 
           {/* LINHA 4 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 4 }}>Número de Acesso:</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Número de Acesso:</div>
               <input 
                 type="text"
+                placeholder="DDD + Número"
                 value={formData.numeroAcesso}
                 onChange={(e) => setFormData(prev => ({ ...prev, numeroAcesso: e.target.value }))}
-                style={{ ...inputStyleVisivel, width: 240, height: 32, fontSize: 13 }}
+                style={{ ...inputStyleVisivel, width: '100%', maxWidth: 360, height: 36, fontSize: 13.5 }}
               />
             </div>
             <div></div>
           </div>
 
           {/* LINHA 5 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 4 }}>Data de Ativação:</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Data de Ativação:</div>
               <input 
                 type="date"
                 value={formData.dataAtivacao}
                 onChange={(e) => setFormData(prev => ({ ...prev, dataAtivacao: e.target.value }))}
-                style={{ ...inputStyleVisivel, width: 240, height: 32, fontSize: 13 }}
+                style={{ ...inputStyleVisivel, width: '100%', maxWidth: 360, height: 36, fontSize: 13.5 }}
               />
             </div>
 
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 4 }}>Editar Venda:</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Editar Venda:</div>
               <button 
                 type="button" 
                 onClick={handleIrParaVenda}
@@ -799,21 +825,21 @@ export default function Documental() {
                 style={{ 
                   background: 'var(--panel-2)', 
                   border: '1px solid var(--line, #475569)', 
-                  height: 30, 
-                  padding: '0 14px', 
-                  fontSize: 12.5 
+                  height: 36, 
+                  padding: '0 20px', 
+                  fontSize: 13 
                 }}
               >
-                Editar
+                Editar Venda no Caixa
               </button>
             </div>
           </div>
 
           {/* LINHA 6 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Zerar Remuneração:</div>
-              <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 8 }}>Zerar Remuneração:</div>
+              <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', margin: 0 }}>
                   <input 
                     type="radio" 
@@ -838,8 +864,8 @@ export default function Documental() {
             </div>
 
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Gerar Price:</div>
-              <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 8 }}>Gerar Price:</div>
+              <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', margin: 0 }}>
                   <input 
                     type="radio" 
@@ -865,36 +891,37 @@ export default function Documental() {
           </div>
 
           {/* LINHA 7 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 4 }}>Data Digitalização:</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Data Digitalização:</div>
               <input 
                 type="date"
                 value={formData.dataDigitalizacao}
                 onChange={(e) => setFormData(prev => ({ ...prev, dataDigitalizacao: e.target.value }))}
-                style={{ ...inputStyleVisivel, width: 240, height: 32, fontSize: 13 }}
+                style={{ ...inputStyleVisivel, width: '100%', maxWidth: 360, height: 36, fontSize: 13.5 }}
               />
             </div>
 
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 4 }}>Nº Protocolo GED:</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Nº Protocolo GED:</div>
               <input 
                 type="text"
+                placeholder="Ex: 472092420"
                 value={formData.numeroProtocoloGed}
                 onChange={(e) => setFormData(prev => ({ ...prev, numeroProtocoloGed: e.target.value }))}
-                style={{ ...inputStyleVisivel, width: 240, height: 32, fontSize: 13 }}
+                style={{ ...inputStyleVisivel, width: '100%', maxWidth: 360, height: 36, fontSize: 13.5 }}
               />
             </div>
           </div>
 
           {/* LINHA 8 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 4 }}>Vencimento:</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Vencimento:</div>
               <select 
                 value={formData.vencimento} 
                 onChange={(e) => setFormData(prev => ({ ...prev, vencimento: e.target.value }))}
-                style={{ ...inputStyleVisivel, width: 110, height: 32, fontSize: 13 }}
+                style={{ ...inputStyleVisivel, width: 140, height: 36, fontSize: 13.5 }}
               >
                 {LISTA_DIAS_VENCIMENTO.map(dia => (
                   <option key={dia} value={dia}>Dia {dia}</option>
@@ -904,15 +931,15 @@ export default function Documental() {
             <div></div>
           </div>
 
-          <hr style={{ borderColor: 'var(--line-soft, #2a2340)', margin: '4px 0' }} />
+          <hr style={{ borderColor: 'var(--line-soft, #2a2340)', margin: '6px 0' }} />
 
           {/* LINHA 9: Status BKO */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>Status BKO:</span>
+            <span style={{ fontSize: 13.5, color: 'var(--text)', fontWeight: 600 }}>Status BKO:</span>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
               {['Improcedente', 'Procedente', 'Nao avaliado', 'Em avaliacao pelo BKO'].map((status) => (
-                <label key={status} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', margin: 0 }}>
+                <label key={status} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', margin: 0 }}>
                   <input 
                     type="radio" 
                     name="statusBko" 
@@ -920,7 +947,7 @@ export default function Documental() {
                     checked={formData.statusBko === status} 
                     onChange={(e) => setFormData(prev => ({ ...prev, statusBko: e.target.value }))}
                   />
-                  <span style={{ fontSize: 13, fontWeight: formData.statusBko === status ? 700 : 400 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: formData.statusBko === status ? 700 : 400 }}>
                     {status === 'Nao avaliado' ? 'Não avaliado' : status}
                   </span>
                 </label>
@@ -929,45 +956,45 @@ export default function Documental() {
           </div>
 
           {/* LINHA 10: Líder de Equipe */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 360 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', maxWidth: 540 }}>
             <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>Líder de Equipe:</span>
             <input 
               type="text" 
               value={formData.liderEquipe || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, liderEquipe: e.target.value }))}
-              style={{ ...inputStyleVisivel, height: 34, fontSize: 13 }}
+              style={{ ...inputStyleVisivel, height: 36, fontSize: 13.5 }}
             />
           </div>
 
           {/* LINHA 11: Observações */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 520 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
             <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>Observações:</span>
             <textarea 
               rows={3}
               value={formData.observacoes || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, observacoes: e.target.value }))}
-              style={{ ...inputStyleVisivel, resize: 'vertical', fontSize: 13 }}
+              style={{ ...inputStyleVisivel, resize: 'vertical', fontSize: 13.5 }}
             />
           </div>
 
           {/* LINHA 12: Observações da importação */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 520 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
             <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>Observações da importação:</span>
             <textarea 
               rows={3}
               value={formData.observacoesImportacao || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, observacoesImportacao: e.target.value }))}
-              style={{ ...inputStyleVisivel, resize: 'vertical', fontSize: 13 }}
+              style={{ ...inputStyleVisivel, resize: 'vertical', fontSize: 13.5 }}
             />
           </div>
 
-          <hr style={{ borderColor: 'var(--line-soft, #2a2340)', margin: '4px 0' }} />
+          <hr style={{ borderColor: 'var(--line-soft, #2a2340)', margin: '6px 0' }} />
 
           {/* LINHA 13: Situação do serviço & Comissão */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600, marginBottom: 8 }}>Situação do serviço:</div>
-              <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+              <div style={{ fontSize: 13.5, color: 'var(--text)', fontWeight: 600, marginBottom: 8 }}>Situação do serviço:</div>
+              <div style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', margin: 0 }}>
                   <input 
                     type="radio" 
@@ -976,7 +1003,7 @@ export default function Documental() {
                     checked={formData.situacaoServico === 'Confirmado'} 
                     onChange={(e) => setFormData(prev => ({ ...prev, situacaoServico: e.target.value }))}
                   />
-                  <span style={{ fontSize: 13 }}>Confirmado</span>
+                  <span style={{ fontSize: 13.5 }}>Confirmado</span>
                 </label>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', margin: 0 }}>
@@ -987,7 +1014,7 @@ export default function Documental() {
                     checked={formData.situacaoServico === 'Cancelado'} 
                     onChange={(e) => setFormData(prev => ({ ...prev, situacaoServico: e.target.value }))}
                   />
-                  <span style={{ fontSize: 13 }}>Cancelado</span>
+                  <span style={{ fontSize: 13.5 }}>Cancelado</span>
                 </label>
               </div>
             </div>
@@ -996,7 +1023,7 @@ export default function Documental() {
               <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 8 }}>
                 Gerar comissão de serviço do vendedor:
               </div>
-              <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', margin: 0 }}>
                   <input 
                     type="radio" 
@@ -1005,7 +1032,7 @@ export default function Documental() {
                     checked={formData.gerarComissao === 'Sim'} 
                     onChange={(e) => setFormData(prev => ({ ...prev, gerarComissao: e.target.value }))}
                   />
-                  <span style={{ fontSize: 13 }}>Sim</span>
+                  <span style={{ fontSize: 13.5 }}>Sim</span>
                 </label>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', margin: 0 }}>
@@ -1016,30 +1043,29 @@ export default function Documental() {
                     checked={formData.gerarComissao === 'Não'} 
                     onChange={(e) => setFormData(prev => ({ ...prev, gerarComissao: e.target.value }))}
                   />
-                  <span style={{ fontSize: 13 }}>Não</span>
+                  <span style={{ fontSize: 13.5 }}>Não</span>
                 </label>
               </div>
             </div>
 
-            {/* Motivos do Cancelamento Condicional */}
             {formData.situacaoServico === 'Cancelado' && (
               <div style={{
                 background: 'var(--panel-2)',
                 border: '1px solid var(--bad, #ef4444)',
                 borderRadius: 8,
-                padding: 16,
-                maxWidth: 480,
-                marginTop: 6
+                padding: 20,
+                maxWidth: 600,
+                marginTop: 8
               }}>
-                <div style={{ color: 'var(--bad, #ef4444)', fontWeight: 700, fontSize: 13.5, marginBottom: 10 }}>
+                <div style={{ color: 'var(--bad, #ef4444)', fontWeight: 700, fontSize: 14, marginBottom: 12 }}>
                   Motivo do cancelamento:
                 </div>
                 
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 8,
-                  maxHeight: 260,
+                  gap: 10,
+                  maxHeight: 280,
                   overflowY: 'auto',
                   paddingRight: 6
                 }}>
@@ -1066,16 +1092,15 @@ export default function Documental() {
         {/* Rodapé de Ações */}
         <div style={{ 
           background: 'var(--panel-2)', 
-          padding: '14px 24px', 
+          padding: '16px 32px', 
           borderTop: '1px solid var(--line, #332a4d)', 
           display: 'flex', 
           justifyContent: 'flex-end', 
           alignItems: 'center', 
-          gap: 12,
-          marginTop: 'auto'
+          gap: 14
         }}>
           {salvoComSucesso && (
-            <span style={{ color: 'var(--good, #22c55e)', fontSize: 13, fontWeight: 600, marginRight: 'auto' }}>
+            <span style={{ color: 'var(--good, #22c55e)', fontSize: 13.5, fontWeight: 600, marginRight: 'auto' }}>
               ✓ Protocolo da venda #{formData.vendaId} atualizado com sucesso!
             </span>
           )}
@@ -1083,7 +1108,7 @@ export default function Documental() {
           <button 
             type="button" 
             className="btn sm"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 16px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, height: 36, padding: '0 20px' }}
             onClick={() => setEtapa('BUSCA')}
           >
             <ArrowLeft size={15} />
@@ -1100,8 +1125,8 @@ export default function Documental() {
               display: 'flex', 
               alignItems: 'center', 
               gap: 6, 
-              height: 34, 
-              padding: '0 20px', 
+              height: 36, 
+              padding: '0 26px', 
               fontWeight: 700 
             }}
           >
