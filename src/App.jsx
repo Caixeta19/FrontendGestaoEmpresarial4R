@@ -5,11 +5,14 @@ import { ToastProvider } from './components/ToastContext';
 // Componentes Globais
 import Sidebar from './components/Sidebar';
 
-// Páginas
+// Páginas existentes
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
+import Dashboard from './pages/Dashboard';           // Geral -> Painel Inicial
 import DashboardVendas from './pages/DashboardVendas';
-import Venda from './pages/ModuloVendas';
+import ModuloVendas from './pages/ModuloVendas';     // Ecrã com os cartões e botões de venda
+import Venda from './pages/Venda';                   // Formulário de lançamento de venda
+import BuscarVendas from './pages/BuscarVendas';     // Pesquisa de vendas
+import VendasDia from './pages/VendasDia';           // Listagem de vendas do dia
 import Clientes from './pages/Clientes';
 import EntradaEstoque from './pages/EntradaEstoque';
 import Estoque from './pages/Estoque';
@@ -33,47 +36,24 @@ import {
   Bell
 } from 'lucide-react';
 
-// ---------------------------------------------------------------------------
-// TOKENS DE COR (evita divergência entre containers)
-// ---------------------------------------------------------------------------
 const COR_FUNDO = '#0d0a14';
 const COR_TOPBAR = '#110d17';
 const COR_SIDEBAR = '#171124';
 const COR_BORDA = '#281d38';
 
-// ---------------------------------------------------------------------------
-// LOGO 4R SOLUTIONS
-// ---------------------------------------------------------------------------
 function VivoGOLogo() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-      <span style={{
-        fontSize: 24,
-        fontWeight: 900,
-        letterSpacing: -0.5,
-        color: '#ffffff',
-        fontFamily: 'Segoe UI, system-ui, sans-serif'
-      }}>
+      <span style={{ fontSize: 24, fontWeight: 900, letterSpacing: -0.5, color: '#ffffff', fontFamily: 'Segoe UI, system-ui, sans-serif' }}>
         4R
       </span>
-      <span style={{
-        fontSize: 24,
-        fontWeight: 800,
-        letterSpacing: -0.5,
-        background: 'linear-gradient(135deg, #c084fc 0%, #a855f7 100%)',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        fontFamily: 'Segoe UI, system-ui, sans-serif'
-      }}>
+      <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.5, background: 'linear-gradient(135deg, #c084fc 0%, #a855f7 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontFamily: 'Segoe UI, system-ui, sans-serif' }}>
         Solutions
       </span>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// BOTÃO TOGGLE SIDEBAR
-// ---------------------------------------------------------------------------
 function ToggleSidebarIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f1f5f9" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -84,9 +64,6 @@ function ToggleSidebarIcon() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// ÍCONE OFICIAL WHATSAPP
-// ---------------------------------------------------------------------------
 function WhatsAppOfficialIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e2e8f0" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -95,9 +72,6 @@ function WhatsAppOfficialIcon() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// TOPBAR SUPERIOR COM BUSCA E ATALHOS
-// ---------------------------------------------------------------------------
 function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
   const navigate = useNavigate();
 
@@ -122,17 +96,7 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
           type="button"
           onClick={() => setSidebarAberta(!sidebarAberta)}
           title={sidebarAberta ? 'Recolher menu lateral' : 'Expandir menu lateral'}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#ffffff',
-            cursor: 'pointer',
-            padding: 4,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}
+          style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
         >
           <ToggleSidebarIcon />
         </button>
@@ -158,27 +122,13 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
           <input
             type="text"
             placeholder="Digite para buscar um módulo"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#d8b4fe',
-              fontSize: 13,
-              paddingLeft: 10,
-              width: '100%',
-              minWidth: 0,
-              outline: 'none',
-              fontFamily: 'inherit'
-            }}
+            style={{ background: 'transparent', border: 'none', color: '#d8b4fe', fontSize: 13, paddingLeft: 10, width: '100%', minWidth: 0, outline: 'none', fontFamily: 'inherit' }}
           />
         </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
-        <button
-          type="button"
-          title="Assistente IA"
-          style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', padding: 0 }}
-        >
+        <button type="button" title="Assistente IA" style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', padding: 0 }}>
           <Sparkles size={18} />
         </button>
 
@@ -200,38 +150,17 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
           <ChevronDown size={14} color="#94a3b8" />
         </div>
 
-        <button
-          type="button"
-          title="Atendimento & Suporte"
-          style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', padding: 0 }}
-        >
+        <button type="button" title="Atendimento & Suporte" style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', padding: 0 }}>
           <Headphones size={19} />
         </button>
 
-        <button
-          type="button"
-          title="Linhas e Aparelhos"
-          style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', padding: 0 }}
-        >
+        <button type="button" title="Linhas e Aparelhos" style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', padding: 0 }}>
           <Smartphone size={19} />
         </button>
 
         <div style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
           <Bell size={19} color="#e2e8f0" />
-          <span style={{
-            position: 'absolute',
-            top: -6,
-            right: -8,
-            background: '#a855f7',
-            color: '#ffffff',
-            fontSize: 9.5,
-            fontWeight: 800,
-            borderRadius: 10,
-            padding: '1px 4px',
-            minWidth: 14,
-            textAlign: 'center',
-            lineHeight: 1
-          }}>
+          <span style={{ position: 'absolute', top: -6, right: -8, background: '#a855f7', color: '#ffffff', fontSize: 9.5, fontWeight: 800, borderRadius: 10, padding: '1px 4px', minWidth: 14, textAlign: 'center', lineHeight: 1 }}>
             12
           </span>
         </div>
@@ -242,20 +171,7 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
           style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
           <WhatsAppOfficialIcon />
-          <span style={{
-            position: 'absolute',
-            top: -6,
-            right: -8,
-            background: '#a855f7',
-            color: '#ffffff',
-            fontSize: 9.5,
-            fontWeight: 800,
-            borderRadius: 10,
-            padding: '1px 5px',
-            minWidth: 14,
-            textAlign: 'center',
-            lineHeight: 1
-          }}>
+          <span style={{ position: 'absolute', top: -6, right: -8, background: '#a855f7', color: '#ffffff', fontSize: 9.5, fontWeight: 800, borderRadius: 10, padding: '1px 5px', minWidth: 14, textAlign: 'center', lineHeight: 1 }}>
             4
           </span>
         </div>
@@ -273,32 +189,16 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
           <img
             src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
             alt="Usuário"
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: '50%',
-              objectFit: 'cover',
-              border: '1px solid #a855f7'
-            }}
+            style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', border: '1px solid #a855f7' }}
           />
-
           <div style={{ textAlign: 'left', lineHeight: 1.15, maxWidth: 150 }}>
-            <div style={{
-              fontSize: 12,
-              fontWeight: 800,
-              color: '#ffffff',
-              letterSpacing: 0.3,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#ffffff', letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {(session?.nome || 'Usuário').toUpperCase()}
             </div>
             <div style={{ fontSize: 10, color: '#c084fc', fontWeight: 600 }}>
               4 REDES
             </div>
           </div>
-
           <ChevronDown size={14} color="#94a3b8" />
         </div>
       </div>
@@ -306,10 +206,6 @@ function HeaderVivoGOInternal({ sidebarAberta, setSidebarAberta, session }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// LAYOUT PRIVADO
-// Estrutura: coluna (topbar fixa + linha [sidebar rolável | conteúdo rolável])
-// ---------------------------------------------------------------------------
 function LayoutPrivado({ session, setSession }) {
   const [sidebarAberta, setSidebarAberta] = useState(true);
 
@@ -332,7 +228,6 @@ function LayoutPrivado({ session, setSession }) {
         session={session}
       />
 
-      {/* linha: sidebar + conteúdo. minHeight:0 permite que os filhos rolem */}
       <div style={{
         display: 'flex',
         flex: 1,
@@ -355,7 +250,6 @@ function LayoutPrivado({ session, setSession }) {
           </aside>
         )}
 
-        {/* conteúdo: overflowY auto — era 'hidden', o que cortava as páginas */}
         <main style={{
           flex: 1,
           minWidth: 0,
@@ -396,26 +290,55 @@ export default function App() {
         />
 
         <Route element={<LayoutPrivado session={session} setSession={setSession} />}>
+          {/* ========================================================= */}
+          {/* 1. GERAL -> PAINEL INICIAL (PRIMEIRO ECRÃ ACEDIDO)       */}
+          {/* ========================================================= */}
           <Route path="/" element={<Dashboard />} />
+          <Route path="/geral" element={<Dashboard />} />
+          <Route path="/geral/painel-inicial" element={<Dashboard />} />
+
+          {/* Dashboards analíticos */}
           <Route path="/dashboard" element={<DashboardVendas />} />
           <Route path="/dashboard/vendas" element={<DashboardVendas />} />
 
-          <Route path="/venda" element={<Venda />} />
+          {/* ========================================================= */}
+          {/* 2. MÓDULO DE VENDA E OS RESPETIVOS BOTÕES                */}
+          {/* ========================================================= */}
+          {/* Ecrã com os cartões e botões */}
+          <Route path="/venda" element={<ModuloVendas />} />
+          <Route path="/venda/documental" element={<ModuloVendas />} />
+
+          {/* Ações individuais dos 3 botões */}
+          <Route path="/venda/lancar" element={<Venda />} />
+          <Route path="/venda/documental/lancar" element={<Venda />} />
+
+          <Route path="/venda/busca" element={<BuscarVendas />} />
+          <Route path="/venda/documental/busca" element={<BuscarVendas />} />
+
+          <Route path="/venda/hoje" element={<VendasDia />} />
+          <Route path="/venda/documental/hoje" element={<VendasDia />} />
+
+          {/* ========================================================= */}
+          {/* 3. DEMAIS MÓDULOS                                         */}
+          {/* ========================================================= */}
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/documental" element={<Documental />} />
 
-          {/* Módulo Convy & WhatsApp */}
+          {/* Convy & WhatsApp */}
           <Route path="/convy" element={<Mailing />} />
           <Route path="/mailing" element={<Navigate to="/convy" replace />} />
           <Route path="/whatsapp-chat" element={<WhatsAppChatCRM session={session} />} />
 
+          {/* Estoque */}
           <Route path="/estoque" element={<Estoque />} />
           <Route path="/estoque/inventario" element={<EstoqueInventario />} />
           <Route path="/entrada" element={<EntradaEstoque />} />
 
+          {/* Financeiro */}
           <Route path="/financeiro" element={<Financeiro />} />
           <Route path="/financeiro/remuneracao" element={<RemuneracaoVariavel />} />
 
+          {/* Relatórios */}
           <Route path="/relatorios/vendas" element={<Relatorios />} />
           <Route path="/relatorios/documental" element={<Documental />} />
           <Route path="/relatorios/estoque" element={<Estoque />} />
@@ -424,11 +347,6 @@ export default function App() {
 
           <Route path="/power-bi" element={<PowerBI />} />
         </Route>
-
-        <Route
-          path="*"
-          element={<Navigate to={session ? '/dashboard' : '/login'} replace />}
-        />
       </Routes>
     </ToastProvider>
   );
