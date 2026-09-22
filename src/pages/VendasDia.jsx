@@ -14,7 +14,7 @@ export default function VendasDia() {
   const [dataHoje, setDataHoje] = useState('');
   const [vendas, setVendas] = useState([]);
 
-  // Carrega e formata a data atual e as vendas salvas
+  // Carrega e formata a data atual e as vendas salvas no localStorage
   const carregarVendas = () => {
     const hoje = new Date();
     const dataFormatada = hoje.toLocaleDateString('pt-BR');
@@ -25,13 +25,13 @@ export default function VendasDia() {
     if (vendasSalvas.length > 0) {
       setVendas(vendasSalvas);
     } else {
-      // Dados de demonstração padrão
+      // Mock de demonstração inicial caso não haja vendas registradas
       setVendas([
         {
-          id: '000499',
+          id: '000482',
           data: `${dataFormatada} 16:35`,
           filial: '0142 - LOJA SHOPPING CENTRO',
-          vendedor: 'MARINA FERREIRA',
+          vendedor: 'GUILHERME CAIXETA',
           cliente: 'JOÃO PEDRO MARTINS',
           nf: '—'
         }
@@ -43,14 +43,16 @@ export default function VendasDia() {
     carregarVendas();
   }, []);
 
-  // Redireciona para o formulário de venda com os dados carregados
+  // Redireciona para o formulário de lançamento de venda com os dados carregados
   const handleAcessarVenda = (venda) => {
-    navigate('/venda', {
+    sessionStorage.setItem('syscor_venda_edicao', JSON.stringify(venda));
+    navigate('/venda/lancar', {
       state: {
         vendaId: venda.id || venda.numeroVenda,
         clienteNome: venda.cliente,
-        vendedorNome: venda.vendedor,
-        vendaCarregada: venda
+        vendedorNome: venda.vendedor || venda.vendedorNome,
+        vendaCarregada: venda,
+        modoEdicao: true
       }
     });
   };
@@ -61,7 +63,8 @@ export default function VendasDia() {
       display: 'flex',
       flexDirection: 'column',
       gap: 16,
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
+      color: 'var(--text)'
     }}>
       {/* CARD PRINCIPAL */}
       <div style={{
@@ -73,7 +76,7 @@ export default function VendasDia() {
         display: 'flex',
         flexDirection: 'column',
         gap: 20,
-        transition: 'background 0.2s ease, border-color 0.2s ease'
+        transition: 'background 0.2s ease, border-color 0.2s ease, color 0.2s ease'
       }}>
         {/* CABEÇALHO */}
         <div style={{
@@ -128,7 +131,7 @@ export default function VendasDia() {
               transition: 'all 0.15s ease'
             }}
           >
-            <RefreshCw size={14} color="var(--accent)" />
+            <RefreshCw size={14} color="var(--accent, #c026d3)" />
             <span>Atualizar</span>
           </button>
         </div>
@@ -138,7 +141,8 @@ export default function VendasDia() {
           overflowX: 'auto',
           width: '100%',
           borderRadius: 8,
-          border: '1px solid var(--line)'
+          border: '1px solid var(--line)',
+          background: 'var(--panel)'
         }}>
           <table style={{
             width: '100%',
@@ -177,22 +181,22 @@ export default function VendasDia() {
                   onMouseEnter={(e) => e.currentTarget.style.background = 'var(--panel-2)'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'var(--panel)'}
                 >
-                  <td style={{ padding: '14px 16px', fontWeight: 700 }}>
+                  <td style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--text)' }}>
                     {venda.id || venda.numeroVenda}
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
+                  <td style={{ padding: '14px 16px', color: 'var(--text)' }}>
                     {venda.data || venda.criadoEm || dataHoje}
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
+                  <td style={{ padding: '14px 16px', color: 'var(--text)' }}>
                     {venda.filial || '0142 - LOJA SHOPPING CENTRO'}
                   </td>
-                  <td style={{ padding: '14px 16px', textTransform: 'uppercase' }}>
-                    {venda.vendedor || venda.vendedorNome || 'MARINA FERREIRA'}
+                  <td style={{ padding: '14px 16px', textTransform: 'uppercase', color: 'var(--text)' }}>
+                    {venda.vendedor || venda.vendedorNome || 'NÃO INFORMADO'}
                   </td>
-                  <td style={{ padding: '14px 16px', fontWeight: 700, textTransform: 'uppercase' }}>
+                  <td style={{ padding: '14px 16px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text)' }}>
                     {venda.cliente}
                   </td>
-                  <td style={{ padding: '14px 16px' }}>
+                  <td style={{ padding: '14px 16px', color: 'var(--text)' }}>
                     {venda.nf || '—'}
                   </td>
                   <td style={{ padding: '14px 16px' }}>
@@ -202,11 +206,11 @@ export default function VendasDia() {
                       justifyContent: 'center',
                       gap: 12
                     }}>
-                      {/* BOTÃO EDITAR / ACESSAR VENDA */}
+                      {/* BOTÃO EDITAR / ACESSAR VENDA NO CAIXA */}
                       <button
                         type="button"
                         onClick={() => handleAcessarVenda(venda)}
-                        title="Acessar e Editar Venda"
+                        title="Acessar e Editar Venda no Caixa"
                         style={{
                           background: 'transparent',
                           border: '1px solid #38bdf8',
@@ -243,7 +247,7 @@ export default function VendasDia() {
                         <Printer size={16} />
                       </button>
 
-                      {/* BOTÃO DOCUMENTAL */}
+                      {/* BOTÃO GESTÃO DOCUMENTAL */}
                       <button
                         type="button"
                         onClick={() => navigate('/documental')}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
@@ -6,50 +6,13 @@ import {
   Eye, 
   ChevronDown, 
   ChevronUp, 
-  UserCheck,
-  FileEdit,
-  Printer,
-  FileText,
-  XCircle
+  UserCheck 
 } from 'lucide-react';
 
 export default function ModuloVendas() {
   const navigate = useNavigate();
   const [vendaAberta, setVendaAberta] = useState(true);
   const [clienteAberto, setClienteAberto] = useState(false);
-  const [ultimasVendas, setUltimasVendas] = useState([]);
-
-  useEffect(() => {
-    const vendasSalvas = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
-    if (vendasSalvas.length > 0) {
-      setUltimasVendas(vendasSalvas.slice(0, 5));
-    } else {
-      setUltimasVendas([
-        {
-          id: '000499',
-          data: '22/09/2026 16:35',
-          filial: '0142 - LOJA SHOPPING CENTRO',
-          vendedor: 'MARINA FERREIRA',
-          cliente: 'JOÃO PEDRO MARTINS',
-          nf: '—'
-        }
-      ]);
-    }
-  }, []);
-
-  // Redireciona para a tela de venda com o objeto carregado
-  const handleAbrirVendaRegistrada = (venda) => {
-    sessionStorage.setItem('syscor_venda_edicao', JSON.stringify(venda));
-    navigate('/venda/lancar', {
-      state: {
-        vendaId: venda.id || venda.numeroVenda,
-        clienteNome: venda.cliente,
-        vendedorNome: venda.vendedor,
-        vendaCarregada: venda,
-        modoEdicao: true
-      }
-    });
-  };
 
   return (
     <div style={{
@@ -161,7 +124,7 @@ export default function ModuloVendas() {
       </div>
 
       {/* ========================================================= */}
-      {/* 2. CARD: VENDA                                            */}
+      {/* 2. CARD: VENDA (SOMENTE OS 3 BOTÕES DE AÇÃO)               */}
       {/* ========================================================= */}
       <div style={{
         background: 'var(--panel)',
@@ -215,201 +178,141 @@ export default function ModuloVendas() {
         </div>
 
         {vendaAberta && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
-            
-            {/* 3 Botões de Ação */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 16
-            }}>
-              <button
-                type="button"
-                onClick={() => navigate('/venda/lancar')}
-                style={{
-                  background: 'var(--panel-2)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 10,
-                  padding: '30px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 14,
-                  cursor: 'pointer',
-                  color: 'var(--text)',
-                  transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease'
-                }}
-                onMouseEnter={(e) => { 
-                  e.currentTarget.style.borderColor = 'var(--accent)'; 
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => { 
-                  e.currentTarget.style.borderColor = 'var(--line)'; 
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <div style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 12,
-                  background: 'rgba(192, 38, 211, 0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--accent)'
-                }}>
-                  <Plus size={24} />
-                </div>
-                <b style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Inserir Registro</b>
-              </button>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 16,
+            paddingTop: 14,
+            borderTop: '1px solid var(--line)'
+          }}>
+            {/* Botão 1: Inserir Registro */}
+            <button
+              type="button"
+              onClick={() => navigate('/venda/lancar')}
+              style={{
+                background: 'var(--panel-2)',
+                border: '1px solid var(--line)',
+                borderRadius: 10,
+                padding: '30px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 14,
+                cursor: 'pointer',
+                color: 'var(--text)',
+                transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease'
+              }}
+              onMouseEnter={(e) => { 
+                e.currentTarget.style.borderColor = 'var(--accent)'; 
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
+              }}
+              onMouseLeave={(e) => { 
+                e.currentTarget.style.borderColor = 'var(--line)'; 
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                background: 'rgba(192, 38, 211, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--accent)'
+              }}>
+                <Plus size={24} />
+              </div>
+              <b style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Inserir Registro</b>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => navigate('/venda/busca')}
-                style={{
-                  background: 'var(--panel-2)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 10,
-                  padding: '30px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 14,
-                  cursor: 'pointer',
-                  color: 'var(--text)',
-                  transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease'
-                }}
-                onMouseEnter={(e) => { 
-                  e.currentTarget.style.borderColor = 'var(--accent)'; 
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => { 
-                  e.currentTarget.style.borderColor = 'var(--line)'; 
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <div style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 12,
-                  background: 'rgba(192, 38, 211, 0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--accent)'
-                }}>
-                  <Search size={22} />
-                </div>
-                <b style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Buscar Registro</b>
-              </button>
+            {/* Botão 2: Buscar Registro */}
+            <button
+              type="button"
+              onClick={() => navigate('/venda/busca')}
+              style={{
+                background: 'var(--panel-2)',
+                border: '1px solid var(--line)',
+                borderRadius: 10,
+                padding: '30px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 14,
+                cursor: 'pointer',
+                color: 'var(--text)',
+                transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease'
+              }}
+              onMouseEnter={(e) => { 
+                e.currentTarget.style.borderColor = 'var(--accent)'; 
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
+              }}
+              onMouseLeave={(e) => { 
+                e.currentTarget.style.borderColor = 'var(--line)'; 
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                background: 'rgba(192, 38, 211, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--accent)'
+              }}>
+                <Search size={22} />
+              </div>
+              <b style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Buscar Registro</b>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => navigate('/venda/hoje')}
-                style={{
-                  background: 'var(--panel-2)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 10,
-                  padding: '30px 16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 14,
-                  cursor: 'pointer',
-                  color: 'var(--text)',
-                  transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease'
-                }}
-                onMouseEnter={(e) => { 
-                  e.currentTarget.style.borderColor = 'var(--accent)'; 
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => { 
-                  e.currentTarget.style.borderColor = 'var(--line)'; 
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <div style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 12,
-                  background: 'rgba(192, 38, 211, 0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--accent)'
-                }}>
-                  <Eye size={22} />
-                </div>
-                <b style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Ver Vendas de Hoje</b>
-              </button>
-            </div>
-
-            {/* Listagem Rápida com o Botão Azul de Edição */}
-            <div style={{
-              overflowX: 'auto',
-              borderRadius: 8,
-              border: '1px solid var(--line)',
-              background: 'var(--panel)'
-            }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                <thead>
-                  <tr style={{
-                    background: 'var(--panel-2)',
-                    borderBottom: '1px solid var(--line)',
-                    color: 'var(--text-faint)',
-                    textTransform: 'uppercase',
-                    fontSize: 11
-                  }}>
-                    <th style={{ padding: '10px 14px' }}>Nº</th>
-                    <th style={{ padding: '10px 14px', color: 'var(--good, #22c55e)' }}>Data</th>
-                    <th style={{ padding: '10px 14px' }}>Vendedor</th>
-                    <th style={{ padding: '10px 14px' }}>Cliente</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'center' }}>Ação</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ultimasVendas.map((venda, idx) => (
-                    <tr
-                      key={venda.id || idx}
-                      style={{
-                        borderBottom: '1px solid var(--line)',
-                        color: 'var(--text)'
-                      }}
-                    >
-                      <td style={{ padding: '10px 14px', fontWeight: 700 }}>{venda.id || venda.numeroVenda}</td>
-                      <td style={{ padding: '10px 14px' }}>{venda.data || '22/09/2026 16:35'}</td>
-                      <td style={{ padding: '10px 14px', textTransform: 'uppercase' }}>{venda.vendedor || 'MARINA FERREIRA'}</td>
-                      <td style={{ padding: '10px 14px', fontWeight: 700, textTransform: 'uppercase' }}>{venda.cliente}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                        {/* Botão Azul FileEdit */}
-                        <button
-                          type="button"
-                          onClick={() => handleAbrirVendaRegistrada(venda)}
-                          title="Abrir Venda Registrada"
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid #38bdf8',
-                            borderRadius: 6,
-                            color: '#38bdf8',
-                            cursor: 'pointer',
-                            padding: '4px 6px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.15s ease'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.15)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                        >
-                          <FileEdit size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
+            {/* Botão 3: Ver Vendas de Hoje */}
+            <button
+              type="button"
+              onClick={() => navigate('/venda/hoje')}
+              style={{
+                background: 'var(--panel-2)',
+                border: '1px solid var(--line)',
+                borderRadius: 10,
+                padding: '30px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 14,
+                cursor: 'pointer',
+                color: 'var(--text)',
+                transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease'
+              }}
+              onMouseEnter={(e) => { 
+                e.currentTarget.style.borderColor = 'var(--accent)'; 
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
+              }}
+              onMouseLeave={(e) => { 
+                e.currentTarget.style.borderColor = 'var(--line)'; 
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                background: 'rgba(192, 38, 211, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--accent)'
+              }}>
+                <Eye size={22} />
+              </div>
+              <b style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>Ver Vendas de Hoje</b>
+            </button>
           </div>
         )}
       </div>
