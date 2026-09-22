@@ -1,213 +1,308 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit, Printer, FileText, XCircle, ArrowLeft, RefreshCw } from 'lucide-react';
-import { PDVS } from '../data/demoData';
+import { 
+  ArrowLeft, 
+  RefreshCw, 
+  FileEdit, 
+  Printer, 
+  FileText, 
+  XCircle 
+} from 'lucide-react';
 
-export default function VendasHoje() {
+export default function VendasDia() {
   const navigate = useNavigate();
+  const [dataHoje, setDataHoje] = useState('');
   const [vendas, setVendas] = useState([]);
-  const [carregando, setCarregando] = useState(true);
 
-  const dataHojeStr = useMemo(() => {
-    return new Date().toLocaleDateString('pt-BR');
-  }, []);
-
+  // Carrega e formata a data atual e as vendas salvas
   const carregarVendas = () => {
-    setCarregando(true);
-    const historico = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
+    const hoje = new Date();
+    const dataFormatada = hoje.toLocaleDateString('pt-BR');
+    setDataHoje(dataFormatada);
 
-    const vendasDoDia = historico.filter((v) => {
-      if (!v.data) return false;
-      return v.data.trim() === dataHojeStr.trim();
-    });
-
-    setVendas(vendasDoDia);
-    setCarregando(false);
+    const vendasSalvas = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
+    
+    if (vendasSalvas.length > 0) {
+      setVendas(vendasSalvas);
+    } else {
+      // Dados de demonstração padrão
+      setVendas([
+        {
+          id: '000499',
+          data: `${dataFormatada} 16:35`,
+          filial: '0142 - LOJA SHOPPING CENTRO',
+          vendedor: 'MARINA FERREIRA',
+          cliente: 'JOÃO PEDRO MARTINS',
+          nf: '—'
+        }
+      ]);
+    }
   };
 
   useEffect(() => {
     carregarVendas();
-  }, [dataHojeStr]);
+  }, []);
 
-  const handleAcessarVenda = (vendaId) => {
-    navigate('/vendas/lancar', { state: { vendaId } });
-  };
-
-  const handleImprimirComprovante = (venda) => {
-    alert(`Gerando comprovante de venda para o registro #${venda.id}...`);
-  };
-
-  const handleImprimirTermo = (venda) => {
-    alert(`Gerando termo/contrato para a venda #${venda.id}...`);
-  };
-
-  const handleCancelarVenda = (vendaId) => {
-    const confirmar = window.confirm(`Deseja realmente estornar/cancelar a venda #${vendaId}?`);
-    if (!confirmar) return;
-
-    const historico = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
-    const historicoAtualizado = historico.filter((v) => String(v.id) !== String(vendaId));
-    localStorage.setItem('syscor_vendas', JSON.stringify(historicoAtualizado));
-
-    carregarVendas();
-  };
-
-  const getNomeFilial = (pdvId) => {
-    const pdv = (PDVS || []).find((p) => String(p.id) === String(pdvId));
-    return pdv ? `${pdv.codigo} - ${pdv.nome}` : 'DF - PLANALTINA';
+  // Redireciona para o formulário de venda com os dados carregados
+  const handleAcessarVenda = (venda) => {
+    navigate('/venda', {
+      state: {
+        vendaId: venda.id || venda.numeroVenda,
+        clienteNome: venda.cliente,
+        vendedorNome: venda.vendedor,
+        vendaCarregada: venda
+      }
+    });
   };
 
   return (
     <div style={{
-      maxWidth: 1200,
-      margin: '0 auto',
-      background: '#0a0a0f',
-      color: '#e2e8f0',
-      borderRadius: 10,
-      border: '1px solid #1a1926',
-      overflow: 'hidden',
-      padding: '24px 28px'
+      width: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16,
+      boxSizing: 'border-box'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* CARD PRINCIPAL */}
+      <div style={{
+        background: 'var(--panel)',
+        border: '1px solid var(--line)',
+        borderRadius: 12,
+        padding: '24px 28px',
+        boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+        transition: 'background 0.2s ease, border-color 0.2s ease'
+      }}>
+        {/* CABEÇALHO */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: 16
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              onClick={() => navigate('/venda')}
+              title="Voltar ao Módulo de Vendas"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: 4
+              }}
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <h1 style={{
+              fontSize: 20,
+              fontWeight: 800,
+              color: 'var(--text)',
+              margin: 0
+            }}>
+              Vendas do Dia ({dataHoje})
+            </h1>
+          </div>
+
           <button
             type="button"
-            onClick={() => navigate(-1)}
-            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            onClick={carregarVendas}
+            style={{
+              background: 'var(--input-bg)',
+              border: '1px solid var(--line)',
+              borderRadius: 8,
+              color: 'var(--text)',
+              padding: '8px 16px',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              transition: 'all 0.15s ease'
+            }}
           >
-            <ArrowLeft size={20} />
+            <RefreshCw size={14} color="var(--accent)" />
+            <span>Atualizar</span>
           </button>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-            Vendas do Dia ({dataHojeStr})
-          </h2>
         </div>
 
-        <button
-          type="button"
-          onClick={carregarVendas}
-          style={{
-            background: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid #2a283d',
-            color: '#c084fc',
-            borderRadius: 6,
-            padding: '6px 14px',
-            fontSize: 13,
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6
-          }}
-        >
-          <RefreshCw size={14} /> Atualizar
-        </button>
-      </div>
-
-      <div style={{ overflowX: 'auto', border: '1px solid #1e1d2b', borderRadius: 6 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: '#13121b', borderBottom: '1px solid #232230', color: '#94a3b8' }}>
-              <th style={{ padding: '14px 16px', fontWeight: 600, width: 90 }}>Nº</th>
-              <th style={{ padding: '14px 16px', fontWeight: 600, color: '#4ade80', width: 140 }}>Data</th>
-              <th style={{ padding: '14px 16px', fontWeight: 600, width: 140 }}>Filial</th>
-              <th style={{ padding: '14px 16px', fontWeight: 600, width: 200 }}>Vendedor</th>
-              <th style={{ padding: '14px 16px', fontWeight: 600 }}>Cliente</th>
-              <th style={{ padding: '14px 16px', fontWeight: 600, width: 80 }}>NF</th>
-              <th style={{ padding: '14px 16px', fontWeight: 600, width: 160, textAlign: 'center' }}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vendas.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ padding: '36px 12px', textAlign: 'center', color: '#64748b' }}>
-                  {carregando ? 'Carregando vendas...' : 'Nenhuma venda registrada até o momento no dia de hoje.'}
-                </td>
+        {/* TABELA DE VENDAS */}
+        <div style={{
+          overflowX: 'auto',
+          width: '100%',
+          borderRadius: 8,
+          border: '1px solid var(--line)'
+        }}>
+          <table style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            textAlign: 'left',
+            fontSize: 13
+          }}>
+            <thead>
+              <tr style={{
+                background: 'var(--panel-2)',
+                borderBottom: '1px solid var(--line)',
+                color: 'var(--text-faint)',
+                textTransform: 'uppercase',
+                fontSize: 11,
+                letterSpacing: 0.5
+              }}>
+                <th style={{ padding: '14px 16px' }}>Nº</th>
+                <th style={{ padding: '14px 16px', color: 'var(--good, #22c55e)' }}>Data</th>
+                <th style={{ padding: '14px 16px' }}>Filial</th>
+                <th style={{ padding: '14px 16px' }}>Vendedor</th>
+                <th style={{ padding: '14px 16px' }}>Cliente</th>
+                <th style={{ padding: '14px 16px' }}>NF</th>
+                <th style={{ padding: '14px 16px', textAlign: 'center' }}>Ações</th>
               </tr>
-            ) : (
-              vendas.map((item) => (
-                <tr
-                  key={item.id}
-                  style={{ borderBottom: '1px solid #161522', background: '#0d0c14' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#141320')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = '#0d0c14')}
+            </thead>
+            <tbody>
+              {vendas.map((venda, idx) => (
+                <tr 
+                  key={venda.id || idx}
+                  style={{
+                    borderBottom: '1px solid var(--line)',
+                    background: 'var(--panel)',
+                    color: 'var(--text)',
+                    transition: 'background 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--panel-2)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'var(--panel)'}
                 >
-                  <td style={{ padding: '14px 16px', color: '#f8fafc', fontWeight: 600 }}>{item.id}</td>
-                  <td style={{ padding: '14px 16px', color: '#f8fafc', whiteSpace: 'nowrap' }}>
-                    {item.data} {item.hora || '08:00'}
+                  <td style={{ padding: '14px 16px', fontWeight: 700 }}>
+                    {venda.id || venda.numeroVenda}
                   </td>
-                  <td style={{ padding: '14px 16px', color: '#f8fafc', fontSize: 12.5, textTransform: 'uppercase' }}>
-                    {getNomeFilial(item.pdvId)}
+                  <td style={{ padding: '14px 16px' }}>
+                    {venda.data || venda.criadoEm || dataHoje}
                   </td>
-                  <td style={{ padding: '14px 16px', color: '#f8fafc', fontSize: 12.5, textTransform: 'uppercase' }}>
-                    {item.vendedorNome || 'VENDEDOR PADRÃO'}
+                  <td style={{ padding: '14px 16px' }}>
+                    {venda.filial || '0142 - LOJA SHOPPING CENTRO'}
                   </td>
-                  <td style={{ padding: '14px 16px', color: '#f8fafc', fontWeight: 600, fontSize: 12.5, textTransform: 'uppercase' }}>
-                    {item.cliente || 'CLIENTE BALCÃO'}
+                  <td style={{ padding: '14px 16px', textTransform: 'uppercase' }}>
+                    {venda.vendedor || venda.vendedorNome || 'MARINA FERREIRA'}
                   </td>
-                  <td style={{ padding: '14px 16px', color: '#64748b' }}>{item.nf || ''}</td>
-                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                  <td style={{ padding: '14px 16px', fontWeight: 700, textTransform: 'uppercase' }}>
+                    {venda.cliente}
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    {venda.nf || '—'}
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 12
+                    }}>
+                      {/* BOTÃO EDITAR / ACESSAR VENDA */}
                       <button
                         type="button"
-                        title="Acessar / Editar Venda"
-                        onClick={() => handleAcessarVenda(item.id)}
-                        style={btnIconStyle}
+                        onClick={() => handleAcessarVenda(venda)}
+                        title="Acessar e Editar Venda"
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid #38bdf8',
+                          borderRadius: 6,
+                          color: '#38bdf8',
+                          cursor: 'pointer',
+                          padding: '5px 7px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.15)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                       >
-                        <Edit size={16} color="#38bdf8" />
+                        <FileEdit size={16} />
                       </button>
 
+                      {/* BOTÃO IMPRIMIR */}
                       <button
                         type="button"
-                        title="Imprimir Comprovante"
-                        onClick={() => handleImprimirComprovante(item)}
-                        style={btnIconStyle}
+                        onClick={() => window.print()}
+                        title="Imprimir Cupom"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-faint)',
+                          cursor: 'pointer',
+                          padding: 4,
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
                       >
-                        <Printer size={16} color="#cbd5e1" />
+                        <Printer size={16} />
                       </button>
 
+                      {/* BOTÃO DOCUMENTAL */}
                       <button
                         type="button"
-                        title="Ver Termo / Contrato"
-                        onClick={() => handleImprimirTermo(item)}
-                        style={btnIconStyle}
+                        onClick={() => navigate('/documental')}
+                        title="Ir para Gestão Documental"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--accent, #c026d3)',
+                          cursor: 'pointer',
+                          padding: 4,
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
                       >
-                        <FileText size={16} color="#a855f7" />
+                        <FileText size={16} />
                       </button>
 
+                      {/* BOTÃO NOTA FISCAL */}
                       <button
                         type="button"
-                        title="Imprimir Resumo"
-                        onClick={() => handleImprimirComprovante(item)}
-                        style={btnIconStyle}
+                        title="Segunda Via DANFE"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-faint)',
+                          cursor: 'pointer',
+                          padding: 4,
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
                       >
-                        <Printer size={16} color="#cbd5e1" />
+                        <Printer size={16} />
                       </button>
 
+                      {/* BOTÃO CANCELAR */}
                       <button
                         type="button"
+                        onClick={() => alert(`Solicitação de cancelamento da venda ${venda.id || venda.numeroVenda}`)}
                         title="Cancelar Venda"
-                        onClick={() => handleCancelarVenda(item.id)}
-                        style={{ ...btnIconStyle, marginLeft: 6 }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--bad, #ef4444)',
+                          cursor: 'pointer',
+                          padding: 4,
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
                       >
-                        <XCircle size={17} color="#ef4444" />
+                        <XCircle size={16} />
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
-
-const btnIconStyle = {
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center'
-};

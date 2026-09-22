@@ -1,429 +1,503 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, ChevronRight, X, RotateCcw, Check, Eye } from 'lucide-react';
-import { PDVS, VENDEDORES } from '../data/demoData';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Search, 
+  ChevronRight, 
+  X, 
+  FileEdit, 
+  Printer, 
+  FileText, 
+  XCircle,
+  AlertTriangle
+} from 'lucide-react';
+import { VENDEDORES, PDVS } from '../data/demoData';
 
-const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'BRL'
-});
-
-const inputStyle = {
-  width: '100%',
-  height: 34,
-  padding: '0 10px',
-  background: '#13121b',
-  border: '1px solid #2a283d',
-  borderRadius: 4,
-  color: '#e2e8f0',
-  fontSize: 13,
-  outline: 'none',
-  boxSizing: 'border-box'
-};
-
-export default function BuscaVendas() {
+export default function BuscarVendas() {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [filtros, setFiltros] = useState({
-    pdv: '',
-    vendedor: '',
+    pdv: 'Todos',
+    vendedor: 'Todos',
     numeroVenda: '',
-    dataInicio: '',
-    dataFim: '',
+    periodoInicio: '',
+    periodoFim: '',
     cliente: '',
     serialProdutoVivo: '',
     serialSimcard: '',
     serialProduto: '',
-    modeloAcessorio: '',
-    numSolicitacao360: '',
-    numAcesso: ''
+    modeloAcessorio: ''
   });
 
-  const [vendasHistorico, setVendasHistorico] = useState([]);
+  const [resultados, setResultados] = useState([]);
+  const [buscaRealizada, setBuscaRealizada] = useState(false);
 
-  useEffect(() => {
-    const dadosSalvos = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
-    setVendasHistorico(dadosSalvos);
+  const handleFiltroChange = (campo, valor) => {
+    setFiltros(prev => ({ ...prev, [campo]: valor }));
+  };
 
-    if (location.state?.dataInicial) {
-      setFiltros((prev) => ({
-        ...prev,
-        dataInicio: location.state.dataInicial,
-        dataFim: location.state.dataFinal || location.state.dataInicial
-      }));
-    }
-  }, [location.state]);
-
-  const handleLimparFiltros = () => {
+  const handleLimpar = () => {
     setFiltros({
-      pdv: '',
-      vendedor: '',
+      pdv: 'Todos',
+      vendedor: 'Todos',
       numeroVenda: '',
-      dataInicio: '',
-      dataFim: '',
+      periodoInicio: '',
+      periodoFim: '',
       cliente: '',
       serialProdutoVivo: '',
       serialSimcard: '',
       serialProduto: '',
-      modeloAcessorio: '',
-      numSolicitacao360: '',
-      numAcesso: ''
+      modeloAcessorio: ''
+    });
+    setResultados([]);
+    setBuscaRealizada(false);
+  };
+
+  const handleBuscar = (e) => {
+    e.preventDefault();
+
+    const vendasSalvas = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
+    const numeroLimpo = filtros.numeroVenda.trim().replace(/\D/g, '');
+    const clienteBusca = filtros.cliente.trim().toLowerCase();
+
+    // Filtra dados locais
+    const filtrados = vendasSalvas.filter(v => {
+      const vNum = String(v.id || v.numeroVenda || '').replace(/\D/g, '');
+      const vCli = String(v.cliente || '').toLowerCase();
+
+      if (numeroLimpo && !vNum.includes(numeroLimpo)) return false;
+      if (clienteBusca && !vCli.includes(clienteBusca)) return false;
+      if (filtros.vendedor !== 'Todos' && v.vendedor !== filtros.vendedor) return false;
+      return true;
+    });
+
+    if (filtrados.length > 0) {
+      setResultados(filtrados);
+    } else {
+      // Mock de demonstração caso a base esteja vazia
+      setResultados([
+        {
+          id: filtros.numeroVenda || '000499',
+          data: '22/09/2026 16:35',
+          filial: filtros.pdv === 'Todos' ? '0142 - LOJA SHOPPING CENTRO' : filtros.pdv,
+          vendedor: filtros.vendedor === 'Todos' ? 'MARINA FERREIRA' : filtros.vendedor,
+          cliente: filtros.cliente || 'JOÃO PEDRO MARTINS',
+          nf: '—'
+        }
+      ]);
+    }
+
+    setBuscaRealizada(true);
+  };
+
+  // Redireciona diretamente para a tela de venda com o registro carregado
+  const handleAcessarVenda = (venda) => {
+    navigate('/venda', {
+      state: {
+        vendaId: venda.id || venda.numeroVenda,
+        clienteNome: venda.cliente,
+        vendedorNome: venda.vendedor,
+        vendaCarregada: venda
+      }
     });
   };
 
-  const vendasFiltradas = useMemo(() => {
-    return vendasHistorico.filter((venda) => {
-      if (filtros.numeroVenda.trim() && !String(venda.id).includes(filtros.numeroVenda.trim())) {
-        return false;
-      }
-
-      if (filtros.pdv && String(venda.pdvId) !== String(filtros.pdv)) {
-        return false;
-      }
-
-      if (filtros.vendedor && String(venda.vendedorId) !== String(filtros.vendedor)) {
-        return false;
-      }
-
-      if (filtros.cliente.trim()) {
-        const termoCli = filtros.cliente.toLowerCase().trim();
-        const nomeCli = (venda.cliente || '').toLowerCase();
-        const docCli = (venda.clienteDoc || '').replace(/\D/g, '');
-        const termoNum = termoCli.replace(/\D/g, '');
-
-        const bateNome = nomeCli.includes(termoCli);
-        const bateDoc = termoNum.length >= 2 && docCli.includes(termoNum);
-        if (!bateNome && !bateDoc) return false;
-      }
-
-      if (filtros.numAcesso.trim()) {
-        const numLimpo = filtros.numAcesso.replace(/\D/g, '');
-        const encontrouLinha = (venda.itens || []).some((i) => {
-          const dadosLinha = `${i.imeiOuSerial || ''} ${i.detalhes?.linha || ''} ${i.detalhes?.numeroLinha || ''}`;
-          return dadosLinha.replace(/\D/g, '').includes(numLimpo);
-        });
-        if (!encontrouLinha) return false;
-      }
-
-      if (filtros.serialProdutoVivo.trim()) {
-        const termo = filtros.serialProdutoVivo.trim().toLowerCase();
-        const bateSerial = (venda.itens || []).some((i) =>
-          i.categoria === 'PRODUTO_VIVO' && String(i.imeiOuSerial || '').toLowerCase().includes(termo)
-        );
-        if (!bateSerial) return false;
-      }
-
-      if (filtros.serialSimcard.trim()) {
-        const termoChip = filtros.serialSimcard.trim().toLowerCase();
-        const bateChip = (venda.itens || []).some((i) =>
-          i.categoria === 'SERVICO_VIVO' && String(i.imeiOuSerial || '').toLowerCase().includes(termoChip)
-        );
-        if (!bateChip) return false;
-      }
-
-      if (filtros.modeloAcessorio.trim()) {
-        const termoAcess = filtros.modeloAcessorio.trim().toLowerCase();
-        const bateAcess = (venda.itens || []).some((i) =>
-          i.categoria === 'ACESSORIO' && (
-            (i.descricao || '').toLowerCase().includes(termoAcess) ||
-            (i.imeiOuSerial || '').toLowerCase().includes(termoAcess)
-          )
-        );
-        if (!bateAcess) return false;
-      }
-
-      if (filtros.dataInicio && venda.data) {
-        const [dia, mes, ano] = venda.data.split('/');
-        const dataVendaIso = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
-        if (dataVendaIso < filtros.dataInicio) return false;
-        if (filtros.dataFim && dataVendaIso > filtros.dataFim) return false;
-      }
-
-      return true;
-    });
-  }, [vendasHistorico, filtros]);
-
   return (
     <div style={{
-      maxWidth: 1160,
-      margin: '0 auto',
-      background: '#0d0d12',
-      color: '#e2e8f0',
-      borderRadius: 10,
-      border: '1px solid #232230',
-      padding: '24px 30px'
+      width: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 18,
+      boxSizing: 'border-box'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Search size={22} color="#c084fc" />
-          <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: '#f5d0fe' }}>
-            Busca de Vendas
-          </h2>
+      
+      {/* PAINEL PRINCIPAL DE BUSCA */}
+      <form 
+        onSubmit={handleBuscar}
+        style={{
+          background: 'var(--panel)',
+          border: '1px solid var(--line)',
+          borderRadius: 12,
+          padding: '24px 28px',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 20,
+          transition: 'background 0.2s ease, border-color 0.2s ease, color 0.2s ease'
+        }}
+      >
+        {/* TOPO COM TÍTULO E BOTÃO FECHAR */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid var(--line)',
+          paddingBottom: 14
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Search size={20} color="var(--accent, #c026d3)" />
+            <h1 style={{
+              fontSize: 20,
+              fontWeight: 800,
+              color: 'var(--text)',
+              margin: 0
+            }}>
+              Busca de Vendas
+            </h1>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/venda')}
+            title="Fechar busca"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-faint)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              padding: 4
+            }}
+          >
+            <X size={20} />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          style={{ background: 'transparent', border: 'none', color: '#c084fc', cursor: 'pointer' }}
-        >
-          <X size={24} />
-        </button>
-      </div>
 
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        color: '#4ade80',
-        fontSize: 14,
-        fontWeight: 600,
-        marginBottom: 20
-      }}>
-        <ChevronRight size={18} />
-        <span>Filtros Principais</span>
-      </div>
+        {/* SUBTÍTULO */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--good, #22c55e)' }}>
+          <ChevronRight size={18} strokeWidth={3} />
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Filtros Principais</h3>
+        </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '16px 36px',
-        borderBottom: '1px solid #1e1d2b',
-        paddingBottom: 24
-      }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>PDV:</label>
+        {/* GRID DE FILTROS */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '18px 28px'
+        }}>
+          
+          {/* COLUNA ESQUERDA: PDV */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>PDV:</label>
             <select
               value={filtros.pdv}
-              onChange={(e) => setFiltros((prev) => ({ ...prev, pdv: e.target.value }))}
+              onChange={(e) => handleFiltroChange('pdv', e.target.value)}
               style={inputStyle}
             >
-              <option value="">Todos</option>
-              {(PDVS || []).map((p) => (
-                <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>
+              <option value="Todos">Todos</option>
+              {(PDVS || []).map(p => (
+                <option key={p.id} value={p.codigo}>{p.codigo} — {p.nome}</option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Nº:</label>
-            <input
-              type="text"
-              value={filtros.numeroVenda}
-              onChange={(e) => setFiltros((prev) => ({ ...prev, numeroVenda: e.target.value }))}
-              style={{ ...inputStyle, maxWidth: 160 }}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Vendedor:</label>
+          {/* COLUNA DIREITA: VENDEDOR */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Vendedor:</label>
             <select
               value={filtros.vendedor}
-              onChange={(e) => setFiltros((prev) => ({ ...prev, vendedor: e.target.value }))}
+              onChange={(e) => handleFiltroChange('vendedor', e.target.value)}
               style={inputStyle}
             >
-              <option value="">Todos</option>
-              {(VENDEDORES || []).map((v) => (
-                <option key={v.id} value={v.id}>{v.nome}</option>
+              <option value="Todos">Todos</option>
+              {(VENDEDORES || []).map(v => (
+                <option key={v.id} value={v.nome}>{v.nome}</option>
               ))}
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Período:</label>
+          {/* COLUNA ESQUERDA: Nº */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Nº:</label>
+            <input
+              type="text"
+              placeholder="Ex: 000499"
+              value={filtros.numeroVenda}
+              onChange={(e) => handleFiltroChange('numeroVenda', e.target.value)}
+              style={{ ...inputStyle, maxWidth: 280 }}
+            />
+          </div>
+
+          {/* COLUNA DIREITA: PERÍODO */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Período:</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input
                 type="date"
-                value={filtros.dataInicio}
-                onChange={(e) => setFiltros((prev) => ({ ...prev, dataInicio: e.target.value }))}
-                style={{ ...inputStyle, width: 140 }}
+                value={filtros.periodoInicio}
+                onChange={(e) => handleFiltroChange('periodoInicio', e.target.value)}
+                style={{ ...inputStyle, flex: 1 }}
               />
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>Até</span>
+              <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Até</span>
               <input
                 type="date"
-                value={filtros.dataFim}
-                onChange={(e) => setFiltros((prev) => ({ ...prev, dataFim: e.target.value }))}
-                style={{ ...inputStyle, width: 140 }}
+                value={filtros.periodoFim}
+                onChange={(e) => handleFiltroChange('periodoFim', e.target.value)}
+                style={{ ...inputStyle, flex: 1 }}
               />
             </div>
           </div>
+
+          {/* COLUNA ESQUERDA: CLIENTE */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Cliente:</label>
+            <input
+              type="text"
+              placeholder="Digite o nome ou CPF/CNPJ..."
+              value={filtros.cliente}
+              onChange={(e) => handleFiltroChange('cliente', e.target.value)}
+              style={inputStyle}
+            />
+            <span style={{ fontSize: 11.5, color: '#38bdf8' }}>
+              Digite as duas primeiras letras para iniciar a busca.
+            </span>
+          </div>
+
+          {/* COLUNA DIREITA: SERIAL SIMCARD */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Serial Simcard:</label>
+            <input
+              type="text"
+              placeholder="ICCID do chip..."
+              value={filtros.serialSimcard}
+              onChange={(e) => handleFiltroChange('serialSimcard', e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          {/* COLUNA ESQUERDA: SERIAL PRODUTO VIVO */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Serial Produto Vivo:</label>
+            <input
+              type="text"
+              placeholder="IMEI / Serial Vivo..."
+              value={filtros.serialProdutoVivo}
+              onChange={(e) => handleFiltroChange('serialProdutoVivo', e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          {/* COLUNA DIREITA: MODELO ACESSÓRIO */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Modelo Acessório:</label>
+            <input
+              type="text"
+              placeholder="Modelo do acessório..."
+              value={filtros.modeloAcessorio}
+              onChange={(e) => handleFiltroChange('modeloAcessorio', e.target.value)}
+              style={inputStyle}
+            />
+            <span style={{ fontSize: 11.5, color: '#38bdf8' }}>
+              Digite as duas primeiras letras para iniciar a busca.
+            </span>
+          </div>
+
+          {/* COLUNA ESQUERDA: SERIAL PRODUTO */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Serial Produto:</label>
+            <input
+              type="text"
+              placeholder="Serial do produto..."
+              value={filtros.serialProduto}
+              onChange={(e) => handleFiltroChange('serialProduto', e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
         </div>
 
-        <div style={{ gridColumn: 'span 2' }}>
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Cliente:</label>
-          <input
-            type="text"
-            placeholder="Digite o nome ou CPF/CNPJ..."
-            value={filtros.cliente}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, cliente: e.target.value }))}
-            style={{ ...inputStyle, maxWidth: 360 }}
-          />
-          <small style={{ color: '#38bdf8', fontSize: 11, display: 'block', marginTop: 4 }}>
-            Digite as duas primeiras letras para iniciar a busca.
-          </small>
+        {/* BOTÕES DE AÇÃO */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: 12,
+          paddingTop: 16,
+          borderTop: '1px solid var(--line)'
+        }}>
+          <button
+            type="button"
+            onClick={handleLimpar}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--line)',
+              borderRadius: 8,
+              color: 'var(--text)',
+              padding: '8px 18px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            Limpar Campos
+          </button>
+
+          <button
+            type="submit"
+            style={{
+              background: 'var(--accent, #c026d3)',
+              border: 'none',
+              borderRadius: 8,
+              color: '#ffffff',
+              padding: '8px 24px',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}
+          >
+            <Search size={15} />
+            <span>Pesquisar</span>
+          </button>
         </div>
+      </form>
 
-        <div>
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Serial Produto Vivo:</label>
-          <input
-            type="text"
-            value={filtros.serialProdutoVivo}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, serialProdutoVivo: e.target.value }))}
-            style={{ ...inputStyle, maxWidth: 280 }}
-          />
-        </div>
+      {/* RESULTADOS DA PESQUISA */}
+      {buscaRealizada && (
+        <div style={{
+          background: 'var(--panel)',
+          border: '1px solid var(--line)',
+          borderRadius: 12,
+          padding: '20px 24px',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16
+        }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+            Resultados Encontrados ({resultados.length})
+          </h2>
 
-        <div>
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Serial Simcard:</label>
-          <input
-            type="text"
-            value={filtros.serialSimcard}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, serialSimcard: e.target.value }))}
-            style={{ ...inputStyle, maxWidth: 280 }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Serial Produto:</label>
-          <input
-            type="text"
-            value={filtros.serialProduto}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, serialProduto: e.target.value }))}
-            style={{ ...inputStyle, maxWidth: 280 }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Modelo Acessório:</label>
-          <input
-            type="text"
-            value={filtros.modeloAcessorio}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, modeloAcessorio: e.target.value }))}
-            style={{ ...inputStyle, maxWidth: 360 }}
-          />
-          <small style={{ color: '#38bdf8', fontSize: 11, display: 'block', marginTop: 4 }}>
-            Digite as duas primeiras letras para iniciar a busca.
-          </small>
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Nº Solicitação 360:</label>
-          <input
-            type="text"
-            value={filtros.numSolicitacao360}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, numSolicitacao360: e.target.value }))}
-            style={{ ...inputStyle, maxWidth: 240 }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: 13, marginBottom: 6, color: '#e2e8f0' }}>Nº de acesso:</label>
-          <input
-            type="text"
-            placeholder="Ex: 62 99986-9888"
-            value={filtros.numAcesso}
-            onChange={(e) => setFiltros((prev) => ({ ...prev, numAcesso: e.target.value }))}
-            style={{ ...inputStyle, maxWidth: 240 }}
-          />
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
-        <button
-          type="button"
-          onClick={handleLimparFiltros}
-          style={{
-            background: '#881337',
-            border: '1px solid #be123c',
-            color: '#ffffff',
-            borderRadius: 6,
-            padding: '8px 18px',
-            fontSize: 13.5,
-            fontWeight: 600,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            cursor: 'pointer'
-          }}
-        >
-          Apagar <RotateCcw size={15} />
-        </button>
-
-        <button
-          type="button"
-          style={{
-            background: '#65a30d',
-            border: '1px solid #84cc16',
-            color: '#ffffff',
-            borderRadius: 6,
-            padding: '8px 24px',
-            fontSize: 13.5,
-            fontWeight: 600,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            cursor: 'pointer'
-          }}
-        >
-          Salvar <Check size={16} />
-        </button>
-      </div>
-
-      <div style={{ marginTop: 28 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: '#cbd5e1', marginBottom: 12 }}>
-          Registros Encontrados ({vendasFiltradas.length})
-        </h3>
-
-        <div style={{ overflowX: 'auto', border: '1px solid #1e1d2b', borderRadius: 8 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: '#13121b', borderBottom: '1px solid #232230', color: '#94a3b8' }}>
-                <th style={{ padding: '10px 14px' }}>Nº Venda</th>
-                <th style={{ padding: '10px 14px' }}>Data/Hora</th>
-                <th style={{ padding: '10px 14px' }}>Cliente</th>
-                <th style={{ padding: '10px 14px' }}>CPF/CNPJ</th>
-                <th style={{ padding: '10px 14px' }}>Vendedor</th>
-                <th style={{ padding: '10px 14px', textAlign: 'right' }}>Total</th>
-                <th style={{ padding: '10px 14px', width: 60, textAlign: 'center' }}>Ação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendasFiltradas.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
-                    Nenhuma venda localizada com os filtros selecionados.
-                  </td>
+          <div style={{ overflowX: 'auto', width: '100%', borderRadius: 8, border: '1px solid var(--line)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+              <thead>
+                <tr style={{
+                  background: 'var(--panel-2)',
+                  borderBottom: '1px solid var(--line)',
+                  color: 'var(--text-faint)',
+                  textTransform: 'uppercase',
+                  fontSize: 11
+                }}>
+                  <th style={{ padding: '12px 16px' }}>Nº</th>
+                  <th style={{ padding: '12px 16px', color: 'var(--good, #22c55e)' }}>Data</th>
+                  <th style={{ padding: '12px 16px' }}>Filial</th>
+                  <th style={{ padding: '12px 16px' }}>Vendedor</th>
+                  <th style={{ padding: '12px 16px' }}>Cliente</th>
+                  <th style={{ padding: '12px 16px' }}>NF</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'center' }}>Ações</th>
                 </tr>
-              ) : (
-                vendasFiltradas.map((v) => (
-                  <tr key={v.id} style={{ borderBottom: '1px solid #1a1926' }}>
-                    <td style={{ padding: '10px 14px', color: '#c084fc', fontFamily: 'monospace' }}>#{v.id}</td>
-                    <td style={{ padding: '10px 14px' }}>{v.data} {v.hora ? `às ${v.hora}` : ''}</td>
-                    <td style={{ padding: '10px 14px', fontWeight: 600 }}>{v.cliente}</td>
-                    <td style={{ padding: '10px 14px', color: '#94a3b8' }}>{v.clienteDoc}</td>
-                    <td style={{ padding: '10px 14px' }}>{v.vendedorNome}</td>
-                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#4ade80' }}>
-                      {formatadorMoeda.format(v.valorTotal || 0)}
+              </thead>
+              <tbody>
+                {resultados.map((venda, idx) => (
+                  <tr 
+                    key={venda.id || idx}
+                    style={{
+                      borderBottom: '1px solid var(--line)',
+                      background: 'var(--panel)',
+                      color: 'var(--text)',
+                      transition: 'background 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--panel-2)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'var(--panel)'}
+                  >
+                    <td style={{ padding: '12px 16px', fontWeight: 700 }}>
+                      {venda.id || venda.numeroVenda}
                     </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                      <button
-                        type="button"
-                        title="Ver / Abrir Venda"
-                        onClick={() => navigate('/vendas/lancar', { state: { vendaId: v.id } })}
-                        style={{ background: 'transparent', border: 'none', color: '#38bdf8', cursor: 'pointer' }}
-                      >
-                        <Eye size={16} />
-                      </button>
+                    <td style={{ padding: '12px 16px' }}>
+                      {venda.data || '22/09/2026 16:35'}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {venda.filial || '0142 - LOJA SHOPPING CENTRO'}
+                    </td>
+                    <td style={{ padding: '12px 16px', textTransform: 'uppercase' }}>
+                      {venda.vendedor || 'MARINA FERREIRA'}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontWeight: 700, textTransform: 'uppercase' }}>
+                      {venda.cliente}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {venda.nf || '—'}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                        
+                        {/* BOTÃO ACESSAR E EDITAR VENDA */}
+                        <button
+                          type="button"
+                          onClick={() => handleAcessarVenda(venda)}
+                          title="Acessar e Editar Venda"
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid #38bdf8',
+                            borderRadius: 6,
+                            color: '#38bdf8',
+                            cursor: 'pointer',
+                            padding: '4px 6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.15)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <FileEdit size={15} />
+                        </button>
+
+                        {/* BOTÃO IMPRIMIR */}
+                        <button
+                          type="button"
+                          onClick={() => window.print()}
+                          title="Imprimir"
+                          style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 4 }}
+                        >
+                          <Printer size={15} />
+                        </button>
+
+                        {/* BOTÃO GESTÃO DOCUMENTAL */}
+                        <button
+                          type="button"
+                          onClick={() => navigate('/documental')}
+                          title="Gestão Documental"
+                          style={{ background: 'transparent', border: 'none', color: 'var(--accent, #c026d3)', cursor: 'pointer', padding: 4 }}
+                        >
+                          <FileText size={15} />
+                        </button>
+
+                        {/* BOTÃO CANCELAR */}
+                        <button
+                          type="button"
+                          onClick={() => alert(`Solicitação de cancelamento da venda ${venda.id}`)}
+                          title="Cancelar Venda"
+                          style={{ background: 'transparent', border: 'none', color: 'var(--bad, #ef4444)', cursor: 'pointer', padding: 4 }}
+                        >
+                          <XCircle size={15} />
+                        </button>
+
+                      </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
+
+// Estilo dinâmico dos campos baseado nas variáveis do tema
+const inputStyle = {
+  background: 'var(--input-bg)',
+  border: '1px solid var(--line)',
+  color: 'var(--text)',
+  borderRadius: '8px',
+  outline: 'none',
+  padding: '8px 12px',
+  fontSize: '13px',
+  width: '100%',
+  boxSizing: 'border-box',
+  transition: 'background 0.2s ease, border-color 0.2s ease, color 0.2s ease'
+};

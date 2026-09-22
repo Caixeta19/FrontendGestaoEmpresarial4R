@@ -74,7 +74,7 @@ export default function Venda() {
 
   const [numeroVenda, setNumeroVenda] = useState('');
   const [abaAtiva, setAbaAtiva] = useState('INICIO');
-  const [status] = useState('ABERTA');
+  const [status, setStatus] = useState('ABERTA');
   const [carregando, setCarregando] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState('');
 
@@ -152,8 +152,59 @@ export default function Venda() {
     parcelas: '1x'
   });
 
+  // =========================================================================
+  // CARREGAR DADOS DE VENDA REGISTRADA (VINDA DO BOTÃO AZUL FILEDIT)
+  // =========================================================================
   useEffect(() => {
-    if (!location.state?.vendaId) {
+    const vendaRecebida = location.state?.vendaCarregada || JSON.parse(sessionStorage.getItem('syscor_venda_edicao') || 'null');
+
+    if (vendaRecebida) {
+      setNumeroVenda(vendaRecebida.id || vendaRecebida.numeroVenda || '');
+      
+      const nomeCliente = vendaRecebida.cliente || '';
+      const docCliente = vendaRecebida.clienteDoc || '';
+      setBuscaCliente(nomeCliente ? (docCliente && docCliente !== '—' ? `${nomeCliente} - ${docCliente}` : nomeCliente) : '');
+      setCliente({ nome: nomeCliente, doc: docCliente });
+
+      if (vendaRecebida.pdvId) setPdvId(vendaRecebida.pdvId);
+      
+      if (vendaRecebida.vendedorId) {
+        setVendedorId(vendaRecebida.vendedorId);
+      } else if (vendaRecebida.vendedor) {
+        const vend = (VENDEDORES || []).find(v => normalizarComparacao(v.nome) === normalizarComparacao(vendaRecebida.vendedor));
+        if (vend) setVendedorId(vend.id);
+      }
+
+      if (vendaRecebida.status) {
+        setStatus(vendaRecebida.status);
+      }
+
+      if (vendaRecebida.itens && Array.isArray(vendaRecebida.itens)) {
+        const novosItens = {
+          PRODUTO_VIVO: [],
+          SERVICO_VIVO: [],
+          ACESSORIO: [],
+          RECARGA: []
+        };
+
+        vendaRecebida.itens.forEach((it) => {
+          const cat = it.categoria || 'PRODUTO_VIVO';
+          if (novosItens[cat]) {
+            novosItens[cat].push(it);
+          } else {
+            novosItens.PRODUTO_VIVO.push(it);
+          }
+        });
+
+        setItensPorCategoria(novosItens);
+      }
+
+      if (vendaRecebida.pagamentos && Array.isArray(vendaRecebida.pagamentos)) {
+        setPagamentos(vendaRecebida.pagamentos);
+      }
+
+      sessionStorage.removeItem('syscor_venda_edicao');
+    } else if (!location.state?.vendaId) {
       const historico = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
       if (historico.length > 0) {
         const ultimoIdNum = parseInt(historico[historico.length - 1].id, 10);
@@ -555,7 +606,14 @@ export default function Venda() {
       };
 
       const historicoAtual = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
-      localStorage.setItem('syscor_vendas', JSON.stringify([...historicoAtual, novaVendaRegistrada]));
+      
+      const jaExisteIndex = historicoAtual.findIndex(v => v.id === numeroVenda);
+      if (jaExisteIndex !== -1) {
+        historicoAtual[jaExisteIndex] = novaVendaRegistrada;
+        localStorage.setItem('syscor_vendas', JSON.stringify(historicoAtual));
+      } else {
+        localStorage.setItem('syscor_vendas', JSON.stringify([...historicoAtual, novaVendaRegistrada]));
+      }
 
       const proximoNumero = String(parseInt(numeroVenda, 10) + 1).padStart(6, '0');
 
@@ -572,6 +630,7 @@ export default function Venda() {
         RECARGA: []
       });
       setAbaAtiva('INICIO');
+      setStatus('ABERTA');
       setCarregando(false);
 
       setMensagemSucesso(`Venda #${novaVendaRegistrada.id} finalizada com sucesso!`);
@@ -580,15 +639,23 @@ export default function Venda() {
   };
 
   return (
-    <div style={{ width: '100%', maxWidth: 1400, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ 
+      width: '100%', 
+      maxWidth: 1400, 
+      margin: '0 auto', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: 16,
+      color: 'var(--text)'
+    }}>
       {mensagemSucesso && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: 10,
-          background: 'var(--good-soft)',
-          border: '1px solid var(--good)',
-          color: 'var(--good)',
+          background: 'rgba(34, 197, 94, 0.15)',
+          border: '1px solid var(--good, #22c55e)',
+          color: 'var(--good, #22c55e)',
           padding: '12px 18px',
           borderRadius: 8,
           fontSize: 13.5,
@@ -602,33 +669,59 @@ export default function Venda() {
       {/* Cabeçalho */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Pencil size={20} color="var(--accent)" />
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, textTransform: 'uppercase' }}>
-            Lançar Venda <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.7 }}>#{numeroVenda || '000000'}</span>
+          <Pencil size={20} color="var(--accent, #c026d3)" />
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, textTransform: 'uppercase', color: 'var(--text)' }}>
+            Lançar Venda <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-faint)' }}>#{numeroVenda || '000000'}</span>
           </h1>
         </div>
-        <span className="badge neutral">{status === 'ABERTA' ? 'ABERTA' : status}</span>
+        <span className="badge neutral" style={{
+          background: 'var(--panel-2)',
+          border: '1px solid var(--line)',
+          color: 'var(--text-dim)',
+          padding: '4px 10px',
+          borderRadius: 6,
+          fontSize: 12,
+          fontWeight: 700
+        }}>
+          {status === 'ABERTA' ? 'ABERTA' : status}
+        </span>
       </div>
 
-      <div className="panel" style={{ padding: 0, overflow: 'visible', width: '100%' }}>
+      <div className="panel" style={{ 
+        padding: 0, 
+        overflow: 'visible', 
+        width: '100%',
+        background: 'var(--panel)',
+        border: '1px solid var(--line)',
+        borderRadius: 12
+      }}>
         {/* Barra de Abas */}
-        <div className="tabs" style={{ padding: '6px 16px 0', position: 'relative' }}>
+        <div className="tabs" style={{ 
+          padding: '8px 16px 0', 
+          position: 'relative',
+          display: 'flex',
+          gap: 6,
+          borderBottom: '1px solid var(--line)'
+        }}>
           <button
             type="button"
             className={`tab ${abaAtiva === 'INICIO' ? 'active' : ''}`}
             onClick={() => setAbaAtiva('INICIO')}
+            style={getTabStyle(abaAtiva === 'INICIO')}
           >
             Início
           </button>
 
           {CATEGORIAS_ITENS.map((cat) => {
             const count = contagemPorCategoria[cat.id] || 0;
+            const ativa = abaAtiva === cat.id;
             return (
               <button
                 key={cat.id}
                 type="button"
-                className={`tab ${abaAtiva === cat.id ? 'active' : ''}`}
+                className={`tab ${ativa ? 'active' : ''}`}
                 onClick={() => setAbaAtiva(cat.id)}
+                style={getTabStyle(ativa)}
               >
                 {cat.rotulo} ({count})
               </button>
@@ -641,8 +734,12 @@ export default function Venda() {
           {abaAtiva === 'INICIO' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
               <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                <label style={{ margin: 0, fontWeight: 600 }}>PDV:</label>
-                <select value={pdvId} onChange={(e) => setPdvId(e.target.value)} style={{ width: '100%', maxWidth: 760 }}>
+                <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>PDV:</label>
+                <select 
+                  value={pdvId} 
+                  onChange={(e) => setPdvId(e.target.value)} 
+                  style={{ ...inputStyleGlobal, width: '100%', maxWidth: 760 }}
+                >
                   <option value="">Escolha ...</option>
                   {(PDVS || []).map((p) => (
                     <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>
@@ -651,8 +748,12 @@ export default function Venda() {
               </div>
 
               <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                <label style={{ margin: 0, fontWeight: 600 }}>Vendedor:</label>
-                <select value={vendedorId} onChange={(e) => setVendedorId(e.target.value)} style={{ width: '100%', maxWidth: 760 }}>
+                <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Vendedor:</label>
+                <select 
+                  value={vendedorId} 
+                  onChange={(e) => setVendedorId(e.target.value)} 
+                  style={{ ...inputStyleGlobal, width: '100%', maxWidth: 760 }}
+                >
                   <option value="">Escolha...</option>
                   {(VENDEDORES || []).map((v) => (
                     <option key={v.id} value={v.id}>{v.nome}</option>
@@ -661,11 +762,11 @@ export default function Venda() {
               </div>
 
               <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'start', gap: 16, margin: 0 }}>
-                <label style={{ marginTop: 10, fontWeight: 600 }}>Cliente:</label>
+                <label style={{ marginTop: 10, fontWeight: 600, color: 'var(--text)' }}>Cliente:</label>
                 <div style={{ position: 'relative', width: '100%', maxWidth: 760 }}>
                   <input
                     type="text"
-                    style={{ width: '100%' }}
+                    style={{ ...inputStyleGlobal, width: '100%' }}
                     placeholder="Buscar por Nome ou CPF/CNPJ..."
                     value={cliente ? `${cliente.nome} - ${cliente.doc || cliente.documento || cliente.cpf || cliente.cnpj}` : buscaCliente}
                     onChange={(e) => {
@@ -724,27 +825,38 @@ export default function Venda() {
                 </div>
               </div>
 
-              <fieldset style={{ borderRadius: 6, padding: '18px 24px', marginTop: 12, border: '1px solid var(--line)', width: '100%', maxWidth: 760, boxSizing: 'border-box' }}>
-                <legend style={{ padding: '0 8px', color: 'var(--text-dim)', fontSize: 13, fontWeight: 600 }}>
+              <fieldset style={{ 
+                borderRadius: 8, 
+                padding: '18px 24px', 
+                marginTop: 12, 
+                border: '1px solid var(--line)', 
+                background: 'var(--panel-2)',
+                width: '100%', 
+                maxWidth: 760, 
+                boxSizing: 'border-box' 
+              }}>
+                <legend style={{ padding: '0 8px', color: 'var(--accent, #c026d3)', fontSize: 13, fontWeight: 700 }}>
                   Autenticação do vendedor:
                 </legend>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
-                    <label style={{ margin: 0 }}>E-mail / Login:</label>
+                    <label style={{ margin: 0, color: 'var(--text)' }}>E-mail / Login:</label>
                     <input
                       type="text"
                       placeholder="email@dominio.com"
                       value={emailLogin}
                       onChange={(e) => setEmailLogin(e.target.value)}
+                      style={inputStyleGlobal}
                     />
                   </div>
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
-                    <label style={{ margin: 0 }}>Senha:</label>
+                    <label style={{ margin: 0, color: 'var(--text)' }}>Senha:</label>
                     <input
                       type="password"
                       placeholder="Senha do vendedor..."
                       value={senha}
                       onChange={(e) => setSenha(e.target.value)}
+                      style={inputStyleGlobal}
                     />
                   </div>
                 </div>
@@ -765,10 +877,16 @@ export default function Venda() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 8,
-                    fontWeight: 500
+                    fontWeight: 600,
+                    background: 'var(--panel-2)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--line)',
+                    padding: '8px 16px',
+                    borderRadius: 6,
+                    cursor: 'pointer'
                   }}
                 >
-                  <Plus size={16} /> Adicionar produto Vivo
+                  <Plus size={16} color="var(--accent)" /> Adicionar produto Vivo
                 </button>
               </div>
 
@@ -801,7 +919,7 @@ export default function Venda() {
 
                   {/* 1. Aparelho/Serviços */}
                   <fieldset style={{ 
-                    border: '1px solid var(--line, #e2e8f0)', 
+                    border: '1px solid var(--line)', 
                     borderRadius: 8, 
                     padding: '18px 22px', 
                     display: 'flex', 
@@ -824,17 +942,7 @@ export default function Venda() {
                             setBuscaSerialProduto(e.target.value);
                             setAparelhoSelecionado(null);
                           }}
-                          style={{
-                            width: '100%',
-                            height: 34,
-                            padding: '0 10px',
-                            fontSize: 13,
-                            borderRadius: 6,
-                            border: '1px solid var(--line, #cbd5e1)',
-                            background: 'var(--panel)',
-                            color: 'var(--text)',
-                            boxSizing: 'border-box'
-                          }}
+                          style={{ ...inputStyleGlobal, width: '100%' }}
                         />
                         {aparelhosSugeridos.length > 0 && !aparelhoSelecionado && (
                           <div style={{
@@ -878,16 +986,7 @@ export default function Venda() {
                       <select
                         value={formProdutoVivo.tabelaPreco}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, tabelaPreco: e.target.value }))}
-                        style={{
-                          width: 240,
-                          height: 34,
-                          padding: '0 8px',
-                          fontSize: 13,
-                          borderRadius: 6,
-                          border: '1px solid var(--line, #cbd5e1)',
-                          background: 'var(--panel)',
-                          color: 'var(--text)'
-                        }}
+                        style={{ ...inputStyleGlobal, width: 240 }}
                       >
                         <option value="">Escolha a tabela...</option>
                         {TABELAS_PRECO.map((tab) => (
@@ -900,7 +999,7 @@ export default function Venda() {
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>SVA:</label>
                       <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, margin: 0 }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, margin: 0, color: 'var(--text)' }}>
                           <input
                             type="radio"
                             name="sva"
@@ -908,7 +1007,7 @@ export default function Venda() {
                             onChange={() => setFormProdutoVivo((p) => ({ ...p, sva: 'Nao' }))}
                           /> Não
                         </label>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, margin: 0 }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, margin: 0, color: 'var(--text)' }}>
                           <input
                             type="radio"
                             name="sva"
@@ -923,7 +1022,7 @@ export default function Venda() {
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Seguro:</label>
                       <div style={{ display: 'flex', gap: 18, alignItems: 'center' }}>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, margin: 0 }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, margin: 0, color: 'var(--text)' }}>
                           <input
                             type="radio"
                             name="seguro"
@@ -931,7 +1030,7 @@ export default function Venda() {
                             onChange={() => setFormProdutoVivo((p) => ({ ...p, seguro: 'Nao' }))}
                           /> Não
                         </label>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, margin: 0 }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, margin: 0, color: 'var(--text)' }}>
                           <input
                             type="radio"
                             name="seguro"
@@ -949,16 +1048,7 @@ export default function Venda() {
                         <select
                           value={formProdutoVivo.segmento}
                           onChange={(e) => setFormProdutoVivo((p) => ({ ...p, segmento: e.target.value }))}
-                          style={{
-                            width: 130,
-                            height: 34,
-                            padding: '0 8px',
-                            fontSize: 13,
-                            borderRadius: 6,
-                            border: '1px solid var(--line, #cbd5e1)',
-                            background: 'var(--panel)',
-                            color: 'var(--text)'
-                          }}
+                          style={{ ...inputStyleGlobal, width: 140 }}
                         >
                           <option value="">Segmento...</option>
                           <option value="Pré">Pré</option>
@@ -968,16 +1058,7 @@ export default function Venda() {
                         <select
                           value={formProdutoVivo.servico}
                           onChange={(e) => setFormProdutoVivo((p) => ({ ...p, servico: e.target.value }))}
-                          style={{
-                            flex: 1,
-                            height: 34,
-                            padding: '0 8px',
-                            fontSize: 13,
-                            borderRadius: 6,
-                            border: '1px solid var(--line, #cbd5e1)',
-                            background: 'var(--panel)',
-                            color: 'var(--text)'
-                          }}
+                          style={{ ...inputStyleGlobal, flex: 1 }}
                         >
                           <option value="Troca de Aparelho">Troca de Aparelho</option>
                           <option value="Aparelho Avulso / Pré">Aparelho Avulso / Pré</option>
@@ -993,16 +1074,7 @@ export default function Venda() {
                         <select
                           value={formProdutoVivo.ddd}
                           onChange={(e) => setFormProdutoVivo((p) => ({ ...p, ddd: e.target.value }))}
-                          style={{
-                            width: 80,
-                            height: 34,
-                            padding: '0 6px',
-                            fontSize: 13,
-                            borderRadius: 6,
-                            border: '1px solid var(--line, #cbd5e1)',
-                            background: 'var(--panel)',
-                            color: 'var(--text)'
-                          }}
+                          style={{ ...inputStyleGlobal, width: 85 }}
                         >
                           <option value="">DDD</option>
                           {LISTA_DDDS.map((d) => (
@@ -1012,16 +1084,7 @@ export default function Venda() {
                         <select
                           value={formProdutoVivo.planoAtivo}
                           onChange={(e) => setFormProdutoVivo((p) => ({ ...p, planoAtivo: e.target.value }))}
-                          style={{
-                            flex: 1,
-                            height: 34,
-                            padding: '0 8px',
-                            fontSize: 13,
-                            borderRadius: 6,
-                            border: '1px solid var(--line, #cbd5e1)',
-                            background: 'var(--panel)',
-                            color: 'var(--text)'
-                          }}
+                          style={{ ...inputStyleGlobal, flex: 1 }}
                         >
                           <option value="">Selecione o plano já ativo / contratado...</option>
                           {LISTA_PLANOS_DEMO.map((pl) => (
@@ -1047,7 +1110,7 @@ export default function Venda() {
 
                   {/* 2. Valores */}
                   <fieldset style={{ 
-                    border: '1px solid var(--line, #e2e8f0)', 
+                    border: '1px solid var(--line)', 
                     borderRadius: 8, 
                     padding: '18px 22px', 
                     display: 'flex', 
@@ -1058,7 +1121,7 @@ export default function Venda() {
                       Valores
                     </legend>
 
-                    {/* Badge Verde de Valor */}
+                    {/* Valor */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Valor:</label>
                       <div>
@@ -1083,17 +1146,7 @@ export default function Venda() {
                         placeholder="0,00"
                         value={formProdutoVivo.valorAdicional}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, valorAdicional: e.target.value }))}
-                        style={{
-                          width: 140,
-                          height: 34,
-                          padding: '0 10px',
-                          fontSize: 13,
-                          borderRadius: 6,
-                          border: '1px solid var(--line, #cbd5e1)',
-                          background: 'var(--panel)',
-                          color: 'var(--text)',
-                          boxSizing: 'border-box'
-                        }}
+                        style={{ ...inputStyleGlobal, width: 140 }}
                       />
                     </div>
 
@@ -1105,7 +1158,7 @@ export default function Venda() {
                       </span>
                     </div>
 
-                    {/* Outros: Desconto + Cupom */}
+                    {/* Outros */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Outros:</label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1115,17 +1168,7 @@ export default function Venda() {
                           placeholder="0,00"
                           value={formProdutoVivo.desconto}
                           onChange={(e) => setFormProdutoVivo((p) => ({ ...p, desconto: e.target.value }))}
-                          style={{
-                            width: 100,
-                            height: 34,
-                            padding: '0 10px',
-                            fontSize: 13,
-                            borderRadius: 6,
-                            border: '1px solid var(--line, #cbd5e1)',
-                            background: 'var(--panel)',
-                            color: 'var(--text)',
-                            boxSizing: 'border-box'
-                          }}
+                          style={{ ...inputStyleGlobal, width: 100 }}
                         />
                         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: 'var(--text)', margin: 0 }}>
                           <input
@@ -1137,22 +1180,13 @@ export default function Venda() {
                       </div>
                     </div>
 
-                    {/* Vencimento da fatura */}
+                    {/* Vencimento */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Vencimento da fatura:</label>
                       <select
                         value={formProdutoVivo.vencimentoFatura}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, vencimentoFatura: e.target.value }))}
-                        style={{
-                          width: 300,
-                          height: 34,
-                          padding: '0 8px',
-                          fontSize: 13,
-                          borderRadius: 6,
-                          border: '1px solid var(--line, #cbd5e1)',
-                          background: 'var(--panel)',
-                          color: 'var(--text)'
-                        }}
+                        style={{ ...inputStyleGlobal, width: 300 }}
                       >
                         <option value="">Escolha o dia do vencimento da fatura</option>
                         {DIAS_VENCIMENTO.map((dia) => (
@@ -1164,7 +1198,7 @@ export default function Venda() {
 
                   {/* 3. Linha */}
                   <fieldset style={{ 
-                    border: '1px solid var(--line, #e2e8f0)', 
+                    border: '1px solid var(--line)', 
                     borderRadius: 8, 
                     padding: '18px 22px', 
                     display: 'flex', 
@@ -1183,17 +1217,7 @@ export default function Venda() {
                         placeholder="Ex: 89 98114-3161"
                         value={formProdutoVivo.numeroLinha}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, numeroLinha: e.target.value }))}
-                        style={{
-                          width: 240,
-                          height: 34,
-                          padding: '0 10px',
-                          fontSize: 13,
-                          borderRadius: 6,
-                          border: '1px solid var(--line, #cbd5e1)',
-                          background: 'var(--panel)',
-                          color: 'var(--text)',
-                          boxSizing: 'border-box'
-                        }}
+                        style={{ ...inputStyleGlobal, width: 240 }}
                       />
                     </div>
 
@@ -1203,16 +1227,7 @@ export default function Venda() {
                       <select
                         value={formProdutoVivo.sistemaOrigem}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, sistemaOrigem: e.target.value }))}
-                        style={{
-                          width: 240,
-                          height: 34,
-                          padding: '0 8px',
-                          fontSize: 13,
-                          borderRadius: 6,
-                          border: '1px solid var(--line, #cbd5e1)',
-                          background: 'var(--panel)',
-                          color: 'var(--text)'
-                        }}
+                        style={{ ...inputStyleGlobal, width: 240 }}
                       >
                         <option value="">Escolha o sistema...</option>
                         {OPCOES_SISTEMA_ORIGEM.map((sis) => (
@@ -1221,7 +1236,7 @@ export default function Venda() {
                       </select>
                     </div>
 
-                    {/* Nº da ordem NEXT / RPON Fixa */}
+                    {/* Nº da ordem NEXT */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Nº da ordem NEXT / RPON Fixa:</label>
                       <input
@@ -1229,21 +1244,11 @@ export default function Venda() {
                         value={formProdutoVivo.numOrdemNext}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, numOrdemNext: e.target.value }))}
                         placeholder="Digite o número da ordem..."
-                        style={{
-                          width: 240,
-                          height: 34,
-                          padding: '0 10px',
-                          fontSize: 13,
-                          borderRadius: 6,
-                          border: '1px solid var(--line, #cbd5e1)',
-                          background: 'var(--panel)',
-                          color: 'var(--text)',
-                          boxSizing: 'border-box'
-                        }}
+                        style={{ ...inputStyleGlobal, width: 240 }}
                       />
                     </div>
 
-                    {/* Nº da solicitação do GED */}
+                    {/* Nº da solicitação GED */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Nº da solicitação do GED:</label>
                       <input
@@ -1251,22 +1256,12 @@ export default function Venda() {
                         value={formProdutoVivo.numSolicitacaoGed}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, numSolicitacaoGed: e.target.value }))}
                         placeholder="Digite o número da solicitação..."
-                        style={{
-                          width: 320,
-                          height: 34,
-                          padding: '0 10px',
-                          fontSize: 13,
-                          borderRadius: 6,
-                          border: '1px solid var(--line, #cbd5e1)',
-                          background: 'var(--panel)',
-                          color: 'var(--text)',
-                          boxSizing: 'border-box'
-                        }}
+                        style={{ ...inputStyleGlobal, width: 320 }}
                       />
                     </div>
                   </fieldset>
 
-                  {/* Card Flutuante de Ações */}
+                  {/* Card de Ações */}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'flex-end',
@@ -1281,6 +1276,14 @@ export default function Venda() {
                       type="button"
                       className="btn ghost"
                       onClick={() => setModalProdutoAberto(false)}
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--text)',
+                        border: '1px solid var(--line)',
+                        padding: '6px 14px',
+                        borderRadius: 6,
+                        cursor: 'pointer'
+                      }}
                     >
                       Voltar
                     </button>
@@ -1288,7 +1291,18 @@ export default function Venda() {
                       type="button"
                       className="btn solid"
                       onClick={handleSalvarProdutoVivo}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: 6,
+                        background: 'var(--accent, #c026d3)',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '6px 16px',
+                        borderRadius: 6,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
                     >
                       Salvar <Check size={16} />
                     </button>
@@ -1298,15 +1312,15 @@ export default function Venda() {
               )}
 
               {/* Tabela de Produtos Cadastrados */}
-              <div className="table-wrap">
-                <table>
+              <div className="table-wrap" style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
-                    <tr>
-                      <th>Descrição do Aparelho</th>
-                      <th>Serial / IMEI</th>
-                      <th>Linha / Plano Ativo</th>
-                      <th style={{ textAlign: 'right' }}>Qtd.</th>
-                      <th style={{ textAlign: 'right' }}>Total</th>
+                    <tr style={{ background: 'var(--panel-2)', color: 'var(--text-faint)', borderBottom: '1px solid var(--line)' }}>
+                      <th style={{ padding: '12px 16px' }}>Descrição do Aparelho</th>
+                      <th style={{ padding: '12px 16px' }}>Serial / IMEI</th>
+                      <th style={{ padding: '12px 16px' }}>Linha / Plano Ativo</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Qtd.</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Total</th>
                       <th style={{ width: 40 }}></th>
                     </tr>
                   </thead>
@@ -1319,17 +1333,17 @@ export default function Venda() {
                       </tr>
                     ) : (
                       itensPorCategoria.PRODUTO_VIVO.map((item) => (
-                        <tr key={item.id}>
-                          <td><b>{item.descricao}</b></td>
-                          <td className="mono" style={{ color: 'var(--accent)' }}>{item.imeiOuSerial}</td>
-                          <td style={{ color: 'var(--text-faint)' }}>
+                        <tr key={item.id} style={{ borderBottom: '1px solid var(--line)', color: 'var(--text)' }}>
+                          <td style={{ padding: '12px 16px' }}><b>{item.descricao}</b></td>
+                          <td className="mono" style={{ padding: '12px 16px', color: 'var(--accent)' }}>{item.imeiOuSerial}</td>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-faint)' }}>
                             {item.numeroLinha || '—'} {item.detalhes?.planoAtivo ? `(${item.detalhes.planoAtivo})` : ''}
                           </td>
-                          <td style={{ textAlign: 'right' }}>{item.quantidade}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--good)' }} className="mono">
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>{item.quantidade}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: 'var(--good)' }} className="mono">
                             {formatadorMoeda.format(item.valorTotal)}
                           </td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ textAlign: 'center', padding: '12px 8px' }}>
                             <button
                               type="button"
                               onClick={() => handleRemoverItem('PRODUTO_VIVO', item.id)}
@@ -1353,7 +1367,7 @@ export default function Venda() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <form onSubmit={handleAdicionarServicoVivo} style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 840 }}>
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                  <label style={{ margin: 0 }}>Serviço:</label>
+                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Serviço:</label>
                   <select
                     value={servicoForm.servico}
                     onChange={(e) => setServicoForm((prev) => ({ 
@@ -1361,6 +1375,7 @@ export default function Venda() {
                       servico: e.target.value,
                       serialConfirmado: false
                     }))}
+                    style={inputStyleGlobal}
                   >
                     <option value="">Escolha ...</option>
                     {OPCOES_SERVICO.map((s) => (
@@ -1371,9 +1386,9 @@ export default function Venda() {
 
                 {requerPlanoAntigo && (
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                    <label style={{ margin: 0, color: 'var(--warn)' }}>Plano Antigo / Atual:</label>
+                    <label style={{ margin: 0, color: 'var(--warn)', fontWeight: 600 }}>Plano Antigo / Atual:</label>
                     <select
-                      style={{ flex: 1, borderColor: 'var(--warn)' }}
+                      style={{ ...inputStyleGlobal, borderColor: 'var(--warn)' }}
                       value={servicoForm.planoAntigo}
                       onChange={(e) => setServicoForm((prev) => ({ ...prev, planoAntigo: e.target.value }))}
                     >
@@ -1386,11 +1401,11 @@ export default function Venda() {
                 )}
 
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'start', gap: 16, margin: 0 }}>
-                  <label style={{ marginTop: 10 }}>{requerPlanoAntigo ? 'Plano Novo (Destino):' : 'Plano Contratado:'}</label>
+                  <label style={{ marginTop: 10, fontWeight: 600, color: 'var(--text)' }}>{requerPlanoAntigo ? 'Plano Novo (Destino):' : 'Plano Contratado:'}</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <select 
-                        style={{ width: 90 }}
+                        style={{ ...inputStyleGlobal, width: 90 }}
                         value={servicoForm.ddd}
                         onChange={(e) => setServicoForm((prev) => ({ ...prev, ddd: e.target.value }))}
                       >
@@ -1401,7 +1416,7 @@ export default function Venda() {
                       </select>
 
                       <select
-                        style={{ flex: 1 }}
+                        style={{ ...inputStyleGlobal, flex: 1 }}
                         value={servicoForm.tipoPlano}
                         onChange={(e) => setServicoForm((prev) => ({ ...prev, tipoPlano: e.target.value }))}
                       >
@@ -1422,6 +1437,7 @@ export default function Venda() {
                           valorMensalidade: sel ? sel.valorMensal : 0.00
                         }));
                       }}
+                      style={inputStyleGlobal}
                     >
                       <option value="">Escolha o plano novo...</option>
                       {LISTA_PLANOS_DEMO.map((p) => (
@@ -1434,10 +1450,10 @@ export default function Venda() {
                 </div>
 
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                  <label style={{ margin: 0 }}>Número da linha:</label>
+                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Número da linha:</label>
                   <input
                     type="text"
-                    style={{ maxWidth: 260 }}
+                    style={{ ...inputStyleGlobal, maxWidth: 260 }}
                     placeholder="Ex: 99437-3977"
                     value={servicoForm.numeroLinha}
                     onChange={(e) => setServicoForm((prev) => ({ ...prev, numeroLinha: e.target.value }))}
@@ -1445,13 +1461,13 @@ export default function Venda() {
                 </div>
 
                 {requerSimcard && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 14px', background: 'var(--panel-2)', borderRadius: 8, border: '1px solid var(--line-soft)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', background: 'var(--panel-2)', borderRadius: 8, border: '1px solid var(--line)' }}>
                     {servicoForm.servico === 'Troca de Simcard' && (
                       <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                        <label style={{ margin: 0, fontSize: 13 }}>Simcard 3G (Antigo):</label>
+                        <label style={{ margin: 0, fontSize: 13, color: 'var(--text)' }}>Simcard 3G (Antigo):</label>
                         <input
                           type="text"
-                          style={{ maxWidth: 280 }}
+                          style={{ ...inputStyleGlobal, maxWidth: 280 }}
                           placeholder="ICCID antigo..."
                           value={servicoForm.simcard3g}
                           onChange={(e) => setServicoForm((prev) => ({ ...prev, simcard3g: e.target.value }))}
@@ -1489,14 +1505,14 @@ export default function Venda() {
                     {!servicoForm.clientePossuiSimcard && (
                       <>
                         <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                          <label style={{ margin: 0, fontSize: 13 }}>
+                          <label style={{ margin: 0, fontSize: 13, color: 'var(--text)' }}>
                             {servicoForm.servico === 'Troca de Simcard' ? 'Simcard 4G (Novo):' : 'Simcard / Serial:'}
                           </label>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <input
                               type="text"
-                              style={{ maxWidth: 280 }}
+                              style={{ ...inputStyleGlobal, maxWidth: 280 }}
                               placeholder="Digite ou bipe o ICCID..."
                               value={servicoForm.simcard4g}
                               onChange={(e) => setServicoForm((prev) => ({ ...prev, simcard4g: e.target.value, serialConfirmado: false }))}
@@ -1512,7 +1528,12 @@ export default function Venda() {
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 4,
-                                height: 36
+                                height: 36,
+                                padding: '0 14px',
+                                borderRadius: 6,
+                                border: 'none',
+                                fontWeight: 700,
+                                cursor: 'pointer'
                               }}
                             >
                               {servicoForm.serialConfirmado ? <Check size={14} /> : null}
@@ -1526,7 +1547,7 @@ export default function Venda() {
                           <input
                             type="text"
                             placeholder="0,00"
-                            style={{ width: 80, height: 28, textAlign: 'right' }}
+                            style={{ ...inputStyleGlobal, width: 80, height: 32, textAlign: 'right' }}
                             value={servicoForm.descontoChip}
                             onChange={(e) => setServicoForm((prev) => ({ ...prev, descontoChip: e.target.value }))}
                           />
@@ -1534,7 +1555,7 @@ export default function Venda() {
                           <input
                             type="text"
                             placeholder="0,00"
-                            style={{ width: 80, height: 28, textAlign: 'right' }}
+                            style={{ ...inputStyleGlobal, width: 80, height: 32, textAlign: 'right' }}
                             value={servicoForm.valorChip}
                             onChange={(e) => setServicoForm((prev) => ({ ...prev, valorChip: e.target.value }))}
                           />
@@ -1545,9 +1566,9 @@ export default function Venda() {
                 )}
 
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                  <label style={{ margin: 0 }}>Sistema de Origem:</label>
+                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Sistema de Origem:</label>
                   <select
-                    style={{ maxWidth: 260 }}
+                    style={{ ...inputStyleGlobal, maxWidth: 260 }}
                     value={servicoForm.sistemaOrigem}
                     onChange={(e) => setServicoForm((prev) => ({ ...prev, sistemaOrigem: e.target.value }))}
                   >
@@ -1559,10 +1580,11 @@ export default function Venda() {
                 </div>
 
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                  <label style={{ margin: 0 }}>Vencimento da fatura:</label>
+                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Vencimento da fatura:</label>
                   <select
                     value={servicoForm.vencimentoFatura}
                     onChange={(e) => setServicoForm((prev) => ({ ...prev, vencimentoFatura: e.target.value }))}
+                    style={{ ...inputStyleGlobal, maxWidth: 260 }}
                   >
                     <option value="">Escolha o dia...</option>
                     {DIAS_VENCIMENTO.map((dia) => (
@@ -1572,40 +1594,56 @@ export default function Venda() {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: 8 }}>
-                  <button type="submit" className="btn solid" style={{ padding: '8px 18px', fontSize: 13.5 }}>
+                  <button 
+                    type="submit" 
+                    className="btn solid" 
+                    style={{ 
+                      padding: '10px 20px', 
+                      fontSize: 13.5,
+                      background: 'var(--accent, #c026d3)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 6,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}
+                  >
                     <Plus size={16} /> Adicionar Serviço ao Carrinho
                   </button>
                 </div>
               </form>
 
               {itensPorCategoria.SERVICO_VIVO.length > 0 && (
-                <div className="table-wrap">
-                  <table>
+                <div className="table-wrap" style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                     <thead>
-                      <tr>
-                        <th>Serviço / Transição de Plano</th>
-                        <th>Linha & Chip</th>
-                        <th style={{ textAlign: 'right' }}>Qtd.</th>
-                        <th style={{ textAlign: 'right' }}>Cobrança Balcão</th>
-                        <th style={{ textAlign: 'right' }}>Mensalidade Fatura</th>
+                      <tr style={{ background: 'var(--panel-2)', color: 'var(--text-faint)', borderBottom: '1px solid var(--line)' }}>
+                        <th style={{ padding: '12px 16px' }}>Serviço / Transição de Plano</th>
+                        <th style={{ padding: '12px 16px' }}>Linha & Chip</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right' }}>Qtd.</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right' }}>Cobrança Balcão</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right' }}>Mensalidade Fatura</th>
                         <th style={{ width: 40 }}></th>
                       </tr>
                     </thead>
                     <tbody>
                       {itensPorCategoria.SERVICO_VIVO.map((item) => (
-                        <tr key={item.id}>
-                          <td><b>{item.descricao}</b></td>
-                          <td style={{ color: 'var(--text-faint)' }}>{item.imeiOuSerial}</td>
-                          <td style={{ textAlign: 'right' }}>{item.quantidade}</td>
-                          <td style={{ textAlign: 'right' }} className="mono">
-                            <span className="badge neutral">R$ 0,00</span>
+                        <tr key={item.id} style={{ borderBottom: '1px solid var(--line)', color: 'var(--text)' }}>
+                          <td style={{ padding: '12px 16px' }}><b>{item.descricao}</b></td>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-faint)' }}>{item.imeiOuSerial}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>{item.quantidade}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }} className="mono">
+                            <span style={{ color: 'var(--text-faint)' }}>R$ 0,00</span>
                           </td>
-                          <td style={{ textAlign: 'right' }} className="mono">
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }} className="mono">
                             <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
                               {formatadorMoeda.format(item.mensalidadeFatura)}/mês
                             </span>
                           </td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ textAlign: 'center', padding: '12px 8px' }}>
                             <button
                               type="button"
                               onClick={() => handleRemoverItem('SERVICO_VIVO', item.id)}
@@ -1639,6 +1677,7 @@ export default function Venda() {
                       setAcessorioSelecionado(null);
                       setBuscaAcessorio(e.target.value);
                     }}
+                    style={inputStyleGlobal}
                   />
                   {!acessorioSelecionado && acessoriosSugeridos.length > 0 && (
                     <div style={{
@@ -1682,6 +1721,7 @@ export default function Venda() {
                     min="1"
                     value={qtdAcessorio}
                     onChange={(e) => setQtdAcessorio(Math.max(1, Number(e.target.value)))}
+                    style={inputStyleGlobal}
                   />
                 </div>
 
@@ -1689,20 +1729,30 @@ export default function Venda() {
                   type="submit"
                   className="btn solid"
                   disabled={!acessorioSelecionado}
+                  style={{
+                    background: 'var(--accent, #c026d3)',
+                    color: '#fff',
+                    border: 'none',
+                    height: 36,
+                    padding: '0 18px',
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
                 >
                   Adicionar
                 </button>
               </form>
 
-              <div className="table-wrap">
-                <table>
+              <div className="table-wrap" style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
-                    <tr>
-                      <th>Descrição</th>
-                      <th>SKU / Código</th>
-                      <th style={{ textAlign: 'right' }}>Qtd.</th>
-                      <th style={{ textAlign: 'right' }}>Vlr. Unit.</th>
-                      <th style={{ textAlign: 'right' }}>Total</th>
+                    <tr style={{ background: 'var(--panel-2)', color: 'var(--text-faint)', borderBottom: '1px solid var(--line)' }}>
+                      <th style={{ padding: '12px 16px' }}>Descrição</th>
+                      <th style={{ padding: '12px 16px' }}>SKU / Código</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Qtd.</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Vlr. Unit.</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Total</th>
                       <th style={{ width: 40 }}></th>
                     </tr>
                   </thead>
@@ -1715,15 +1765,15 @@ export default function Venda() {
                       </tr>
                     ) : (
                       itensPorCategoria.ACESSORIO.map((item) => (
-                        <tr key={item.id}>
-                          <td><b>{item.descricao}</b></td>
-                          <td className="mono" style={{ color: 'var(--text-faint)' }}>{item.imeiOuSerial}</td>
-                          <td style={{ textAlign: 'right' }}>{item.quantidade}</td>
-                          <td style={{ textAlign: 'right' }} className="mono">{formatadorMoeda.format(item.valorUnitario)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--good)' }} className="mono">
+                        <tr key={item.id} style={{ borderBottom: '1px solid var(--line)', color: 'var(--text)' }}>
+                          <td style={{ padding: '12px 16px' }}><b>{item.descricao}</b></td>
+                          <td className="mono" style={{ padding: '12px 16px', color: 'var(--text-faint)' }}>{item.imeiOuSerial}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>{item.quantidade}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'right' }} className="mono">{formatadorMoeda.format(item.valorUnitario)}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: 'var(--good)' }} className="mono">
                             {formatadorMoeda.format(item.valorTotal)}
                           </td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ textAlign: 'center', padding: '12px 8px' }}>
                             <button
                               type="button"
                               onClick={() => handleRemoverItem('ACESSORIO', item.id)}
@@ -1746,7 +1796,7 @@ export default function Venda() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <form onSubmit={handleAdicionarPagamento} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 840 }}>
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                  <label style={{ margin: 0, fontWeight: 600 }}>Valor total:</label>
+                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Valor total:</label>
                   <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--good)' }}>
                     {formatadorMoeda.format(totalAPagarCaixa)}
                     {totalPagoAteAgora > 0 && (
@@ -1758,10 +1808,11 @@ export default function Venda() {
                 </div>
 
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                  <label style={{ margin: 0, fontWeight: 600 }}>Forma de pagamento:</label>
+                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Forma de pagamento:</label>
                   <select
                     value={pgtoForm.forma}
                     onChange={(e) => setPgtoForm((prev) => ({ ...prev, forma: e.target.value }))}
+                    style={inputStyleGlobal}
                   >
                     <option value="">Escolha a forma de pagamento...</option>
                     {OPCOES_FORMAS_PAGAMENTO.map((f) => (
@@ -1772,10 +1823,11 @@ export default function Venda() {
 
                 {pgtoForm.forma === 'Cartão de Crédito' && (
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                    <label style={{ margin: 0, fontWeight: 600 }}>Parcelamento:</label>
+                    <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Parcelamento:</label>
                     <select
                       value={pgtoForm.parcelas}
                       onChange={(e) => setPgtoForm((prev) => ({ ...prev, parcelas: e.target.value }))}
+                      style={inputStyleGlobal}
                     >
                       {[1, 2, 3, 4, 5, 6, 10, 12, 18].map((p) => (
                         <option key={p} value={`${p}x`}>{p}x {p === 1 ? 'à vista' : 'sem juros'}</option>
@@ -1785,12 +1837,12 @@ export default function Venda() {
                 )}
 
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                  <label style={{ margin: 0, fontWeight: 600 }}>Valor:</label>
+                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Valor:</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <input
                       type="number"
                       step="0.01"
-                      style={{ maxWidth: 220 }}
+                      style={{ ...inputStyleGlobal, maxWidth: 220 }}
                       placeholder="0,00"
                       value={pgtoForm.valor}
                       onChange={(e) => setPgtoForm((prev) => ({ ...prev, valor: e.target.value }))}
@@ -1799,9 +1851,14 @@ export default function Venda() {
                       type="submit"
                       className="btn solid"
                       style={{
-                        background: 'var(--good)',
-                        borderColor: 'var(--good)',
-                        color: '#ffffff'
+                        background: 'var(--good, #22c55e)',
+                        border: 'none',
+                        color: '#ffffff',
+                        padding: '0 20px',
+                        height: 36,
+                        borderRadius: 6,
+                        fontWeight: 700,
+                        cursor: 'pointer'
                       }}
                       disabled={totalAPagarCaixa > 0 && saldoRestante <= 0}
                     >
@@ -1811,13 +1868,13 @@ export default function Venda() {
                 </div>
               </form>
 
-              <div className="table-wrap">
-                <table>
+              <div className="table-wrap" style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
                   <thead>
-                    <tr>
-                      <th style={{ width: '60%' }}>Forma de pagamento</th>
-                      <th style={{ textAlign: 'right', width: '30%' }}>Valor</th>
-                      <th style={{ width: '10%', textAlign: 'center' }}></th>
+                    <tr style={{ background: 'var(--panel-2)', color: 'var(--text-faint)', borderBottom: '1px solid var(--line)' }}>
+                      <th style={{ width: '60%', padding: '12px 16px' }}>Forma de pagamento</th>
+                      <th style={{ textAlign: 'right', width: '30%', padding: '12px 16px' }}>Valor</th>
+                      <th style={{ width: '10%', textAlign: 'center', padding: '12px 16px' }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1829,12 +1886,12 @@ export default function Venda() {
                       </tr>
                     ) : (
                       pagamentos.map((item) => (
-                        <tr key={item.id}>
-                          <td><b>{item.forma}</b></td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--good)' }} className="mono">
+                        <tr key={item.id} style={{ borderBottom: '1px solid var(--line)', color: 'var(--text)' }}>
+                          <td style={{ padding: '12px 16px' }}><b>{item.forma}</b></td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--good)', padding: '12px 16px' }} className="mono">
                             {formatadorMoeda.format(item.valor)}
                           </td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ textAlign: 'center', padding: '12px 8px' }}>
                             <button
                               type="button"
                               onClick={() => handleRemoverPagamento(item.id)}
@@ -1869,7 +1926,7 @@ export default function Venda() {
       }}>
         <div style={{ color: 'var(--text-dim)', fontSize: 13.5 }}>
           <div>
-            <b>{totalItensCarrinho}</b> {totalItensCarrinho === 1 ? 'item' : 'itens'} no carrinho
+            <b style={{ color: 'var(--text)' }}>{totalItensCarrinho}</b> {totalItensCarrinho === 1 ? 'item' : 'itens'} no carrinho
           </div>
           {itensPorCategoria.SERVICO_VIVO.length > 0 && (
             <small style={{ color: 'var(--text-faint)', display: 'block', marginTop: 2 }}>
@@ -1891,7 +1948,16 @@ export default function Venda() {
             onClick={handleFinalizarVenda}
             disabled={totalItensCarrinho === 0 || carregando}
             className="btn solid"
-            style={{ padding: '12px 26px', fontSize: 14 }}
+            style={{ 
+              padding: '12px 26px', 
+              fontSize: 14,
+              background: 'var(--accent, #c026d3)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              fontWeight: 700,
+              cursor: totalItensCarrinho === 0 || carregando ? 'not-allowed' : 'pointer'
+            }}
           >
             {carregando ? 'A gravar venda...' : 'Finalizar venda'}
           </button>
@@ -1900,3 +1966,28 @@ export default function Venda() {
     </div>
   );
 }
+
+// Estilo padronizado de campos que responde instantaneamente às variáveis CSS do tema
+const inputStyleGlobal = {
+  background: 'var(--panel-2, #181329)',
+  border: '1px solid var(--line, #475569)',
+  color: 'var(--text, #f1eef7)',
+  borderRadius: '6px',
+  outline: 'none',
+  padding: '8px 12px',
+  fontSize: '13px',
+  boxSizing: 'border-box',
+  transition: 'background 0.2s ease, border-color 0.2s ease, color 0.2s ease'
+};
+
+const getTabStyle = (ativa) => ({
+  background: ativa ? 'var(--panel-2)' : 'transparent',
+  border: 'none',
+  borderBottom: ativa ? '2px solid var(--accent, #c026d3)' : '2px solid transparent',
+  color: ativa ? 'var(--accent, #c026d3)' : 'var(--text-faint)',
+  padding: '10px 18px',
+  fontSize: '13px',
+  fontWeight: ativa ? 700 : 500,
+  cursor: 'pointer',
+  transition: 'all 0.15s ease'
+});
