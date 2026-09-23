@@ -20,27 +20,11 @@ import {
   Sun, 
   Moon,
   ChevronRight,
-  Power
+  Power,
+  Mail,
+  WalletCards,
+  Receipt
 } from 'lucide-react';
-
-function ConvyIcon() {
-  return (
-    <div style={{
-      width: 22,
-      height: 22,
-      borderRadius: 6,
-      background: 'linear-gradient(135deg, #a855f7 0%, #6b21a8 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      boxShadow: '0 2px 6px rgba(168, 85, 247, 0.4)'
-    }}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="#ffffff">
-        <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766 0-3.18-2.586-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.074-2.222-.559-1.828-.758-3.003-2.614-3.095-2.736-.092-.122-.738-.981-.738-1.872 0-.891.468-1.33.635-1.512.167-.182.365-.228.487-.228.122 0 .243.001.35.006.113.005.263-.043.412.316.152.365.518 1.264.564 1.355.046.091.076.198.015.32-.061.122-.091.198-.182.304-.091.106-.192.237-.274.318-.092.091-.188.19-.081.374.107.184.475.786 1.021 1.272.704.628 1.297.823 1.48.914.183.091.29.076.397-.046.106-.122.456-.532.578-.715.122-.182.244-.152.411-.091.167.061 1.066.503 1.249.594.183.091.305.137.35.213.045.076.045.441-.099.846z"/>
-      </svg>
-    </div>
-  );
-}
 
 const navGroups = [
   {
@@ -61,9 +45,9 @@ const navGroups = [
   },
   {
     label: 'Mailing',
-    icon: <ConvyIcon />,
+    icon: <Mail size={17} />,
     items: [
-      { to: '/mailing', label: 'Gestão de Campanhas', icon: <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#a855f7' }} /> },
+      { to: '/mailing', label: 'Gestão de Campanhas', icon: <Mail size={15} /> },
     ],
   },
   {
@@ -79,7 +63,8 @@ const navGroups = [
     label: 'Financeiro',
     icon: <DollarSign size={17} />,
     items: [
-      { to: '/financeiro', label: 'Contas', icon: <CreditCard size={15} /> },
+      { to: '/financeiro/caixa', label: 'Caixa', icon: <WalletCards size={15} /> },
+      { to: '/financeiro', label: 'Contas a Pagar', icon: <CreditCard size={15} /> },
       { to: '/financeiro/remuneracao', label: 'Remuneração Variável', icon: <TrendingUp size={15} /> },
     ],
   },
@@ -123,7 +108,7 @@ export default function Sidebar({ setSession }: SidebarProps) {
   )?.label;
 
   const [abertos, setAbertos] = useState<Set<string>>(() =>
-    new Set(grupoAtivoInicial ? [grupoAtivoInicial] : ['Venda', 'Convy'])
+    new Set(grupoAtivoInicial ? [grupoAtivoInicial] : ['Venda', 'Financeiro'])
   );
 
   const alternarGrupo = (label: string) => {
@@ -142,7 +127,6 @@ export default function Sidebar({ setSession }: SidebarProps) {
 
   return (
     <aside className="sidebar">
-
       {/* Navegação dos Módulos */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {navGroups.map((group) => {
@@ -166,7 +150,7 @@ export default function Sidebar({ setSession }: SidebarProps) {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end={item.to === '/' || item.to === '/dashboard' || item.to === '/estoque'}
+                    end={item.to === '/' || item.to === '/financeiro' || item.to === '/dashboard' || item.to === '/estoque'}
                     className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
                   >
                     <span className="ic" style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -180,7 +164,7 @@ export default function Sidebar({ setSession }: SidebarProps) {
           );
         })}
 
-        {/* Divisor e Itens de Sistema (Posicionados logo abaixo do Power BI) */}
+        {/* Divisor e Controles de Sistema */}
         <div style={{
           padding: '14px 12px 16px',
           borderTop: '1px solid var(--line)',

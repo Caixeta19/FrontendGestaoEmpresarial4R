@@ -18,6 +18,7 @@ import EntradaEstoque from './pages/EntradaEstoque';
 import Estoque from './pages/Estoque';
 import EstoqueInventario from './pages/EstoqueInventario';
 import Financeiro from './pages/Financeiro';
+import CaixaFinanceiro from './pages/CaixaFinanceiro'; // Módulo de Caixas (Abertos, PDV, Fechados, Sangria, Suprimentos)
 import RemuneracaoVariavel from './pages/RemuneracaoVariavel';
 import Documental from './pages/Documental';
 import Relatorios from './pages/Relatorios';
@@ -328,7 +329,7 @@ export default function App() {
     });
   };
 
-  // Garante a aplicação do tema nas classes e no seletor HTML global
+  // Aplicação do tema nas classes e no seletor HTML raiz
   useEffect(() => {
     const root = document.documentElement;
     if (temaEscuro) {
@@ -361,7 +362,7 @@ export default function App() {
           />
         }>
           {/* ========================================================= */}
-          {/* 1. GERAL -> PAINEL INICIAL (PRIMEIRO ECRÃ ACEDIDO)        */}
+          {/* 1. GERAL -> PAINEL INICIAL                                */}
           {/* ========================================================= */}
           <Route path="/" element={<Dashboard />} />
           <Route path="/geral" element={<Dashboard />} />
@@ -372,7 +373,7 @@ export default function App() {
           <Route path="/dashboard/vendas" element={<DashboardVendas />} />
 
           {/* ========================================================= */}
-          {/* 2. MÓDULO DE VENDA E OS RESPETIVOS BOTÕES                */}
+          {/* 2. MÓDULO DE VENDA E SUAS ROTAS                           */}
           {/* ========================================================= */}
           <Route path="/venda" element={<ModuloVendas />} />
           <Route path="/venda/documental" element={<ModuloVendas />} />
@@ -388,7 +389,7 @@ export default function App() {
           <Route path="/venda/documental/hoje" element={<VendasDia />} />
 
           {/* ========================================================= */}
-          {/* 3. DEMAIS MÓDULOS                                         */}
+          {/* 3. DEMAIS MÓDULOS OPERACIONAIS                            */}
           {/* ========================================================= */}
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/documental" element={<Documental />} />
@@ -403,11 +404,21 @@ export default function App() {
           <Route path="/estoque/inventario" element={<EstoqueInventario />} />
           <Route path="/entrada" element={<EntradaEstoque />} />
 
-          {/* Financeiro */}
+          {/* ========================================================= */}
+          {/* 4. MÓDULO FINANCEIRO (CAIXA, CONTAS E COMISSÕES)          */}
+          {/* ========================================================= */}
           <Route path="/financeiro" element={<Financeiro />} />
+          <Route path="/financeiro/caixa" element={<CaixaFinanceiro />} />
+          <Route path="/financeiro/caixas" element={<CaixaFinanceiro />} />
+          <Route path="/financeiro/caixas-abertos" element={<CaixaFinanceiro />} />
+          <Route path="/financeiro/caixas-pdv" element={<CaixaFinanceiro />} />
+          <Route path="/financeiro/caixas-fechados" element={<CaixaFinanceiro />} />
+          <Route path="/financeiro/sangria" element={<CaixaFinanceiro />} />
+          <Route path="/financeiro/suprimentos" element={<CaixaFinanceiro />} />
           <Route path="/financeiro/remuneracao" element={<RemuneracaoVariavel />} />
 
           {/* Relatórios */}
+          <Route path="/relatorios" element={<Relatorios />} />
           <Route path="/relatorios/vendas" element={<Relatorios />} />
           <Route path="/relatorios/documental" element={<Documental />} />
           <Route path="/relatorios/estoque" element={<Estoque />} />
