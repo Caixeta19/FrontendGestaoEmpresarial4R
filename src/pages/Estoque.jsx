@@ -1,25 +1,12 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import * as XLSX from 'xlsx';
-import { 
-  Search, 
-  ArrowRightLeft, 
-  Package, 
-  RotateCcw, 
-  ChevronDown, 
-  CheckCircle2, 
-  Upload, 
-  AlertCircle,
-  HelpCircle,
-  Loader2,
-  X
-} from 'lucide-react';
+import { ArrowLeft, ChevronDown, Search, RotateCcw, Download, FileBarChart, Eraser } from 'lucide-react';
 import { estoqueDemo, imeiDemo } from '../data/demoData';
 
-const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'BRL'
-});
+// ---------------------------------------------------------------------------
+// Utilidades
+// ---------------------------------------------------------------------------
+const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function normalizarTexto(txt) {
   return String(txt || '')
@@ -31,707 +18,531 @@ function normalizarTexto(txt) {
     .trim();
 }
 
-function parsePreco(valor) {
-  if (typeof valor === 'number') return valor;
-  if (!valor) return 0;
-  const limpo = String(valor)
-    .replace('R$', '')
-    .trim()
-    .replace(/\./g, '')
-    .replace(',', '.');
-  const num = parseFloat(limpo);
-  return isNaN(num) ? 0 : num;
+function lerLS(chave, fallback) {
+  try {
+    const v = JSON.parse(localStorage.getItem(chave));
+    return Array.isArray(v) && v.length > 0 ? v : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-const OPCOES_PLANOS = [
-  { id: 'pre', label: 'Tabela Regular (PRÉ)' },
-  { id: 'controleBtl', label: 'Controle BTL' },
-  { id: 'controleEntrada', label: 'Controle Entrada' },
-  { id: 'controleAltoValor', label: 'Controle Alto Valor' },
-  { id: 'posIndividual', label: 'Pós Individual' },
-  { id: 'familia2', label: 'Família 2' },
-  { id: 'familia3', label: 'Família 3' },
-  { id: 'familia45', label: 'Família 4/5' },
-  { id: 'vivoV', label: 'Vivo V' }
+// TROQUE por suas lojas reais (ativa: false aparece em vermelho)
+const LOJAS = [
+  { cod: 'CE', nome: 'CENTRO', ativa: true },
+  { cod: 'CO', nome: 'CONDOMÍNIO', ativa: true },
+  { cod: 'FL', nome: 'FLORESTA', ativa: false },
+  { cod: 'GA', nome: 'GAMA', ativa: true },
+  { cod: 'LU', nome: 'LUZIÂNIA', ativa: true },
+  { cod: 'NO', nome: 'NOVO GAMA', ativa: true },
+  { cod: 'PL', nome: 'PLANALTINA', ativa: true },
+  { cod: 'SA', nome: 'SANTO ANTÔNIO', ativa: false },
+  { cod: 'SM', nome: 'SAMAMBAIA', ativa: true },
+  { cod: 'TA', nome: 'TAGUATINGA', ativa: true },
+  { cod: 'VA', nome: 'VALPARAÍSO', ativa: true },
+  { cod: 'VP', nome: 'VICENTE PIRES', ativa: true }
 ];
 
-export default function Estoque() {
-  const navigate = useNavigate();
-  const fileInputRef = useRef(null);
+const TIPOS_PRODUTO = ['Aparelhos', 'Acessórios', 'Recargas', 'Simcard', 'Produtos Diversos', 'Produtos de Assinatura'];
 
-  const [busca, setBusca] = useState('');
-  const [filtroCategoria, setFiltroCategoria] = useState('TODAS');
-  const [planoVisualizacao, setPlanoVisualizacao] = useState(() => {
-    return localStorage.getItem('syscor_plano_visualizacao') || 'pre';
-  });
-  const [serialAbertoId, setSerialAbertoId] = useState(null);
-  const [popoverPlanoId, setPopoverPlanoId] = useState(null);
+function tipoDoItem(cat) {
+  const c = normalizarTexto(cat);
+  if (c.includes('acess')) return 'Acessórios';
+  if (c.includes('recarga')) return 'Recargas';
+  if (c.includes('sim')) return 'Simcard';
+  if (c.includes('assin')) return 'Produtos de Assinatura';
+  if (c.includes('produto') || c.includes('aparelho') || c.includes('smartphone')) return 'Aparelhos';
+  return 'Produtos Diversos';
+}
 
-  const [estoque, setEstoque] = useState([]);
-  const [seriais, setSeriais] = useState([]);
-  const [carregandoArquivo, setCarregandoArquivo] = useState(false);
-  const [feedback, setFeedback] = useState({ tipo: '', mensagem: '' });
+const FILTROS_INICIAIS = {
+  somenteDisponivel: false,
+  grupoLojas: 'TODAS',
+  buscaLoja: '',
+  lojas: [],
+  visao: 'RESUMO',
+  tipos: [],
+  status: 'TODOS'
+};
 
-  const carregarDados = () => {
-    try {
-      const estoqueSalvo = JSON.parse(localStorage.getItem('syscor_estoque'));
-      const imeiSalvo = JSON.parse(localStorage.getItem('syscor_imei'));
+const estiloLabel = { fontSize: 12, fontWeight: 600, color: 'var(--text-faint)', marginBottom: 6, display: 'block' };
+const estiloSecao = { display: 'flex', flexDirection: 'column', gap: 6 };
 
-      setEstoque(estoqueSalvo && estoqueSalvo.length > 0 ? estoqueSalvo : estoqueDemo);
-      setSeriais(imeiSalvo && imeiSalvo.length > 0 ? imeiSalvo : imeiDemo);
-    } catch {
-      setEstoque(estoqueDemo);
-      setSeriais(imeiDemo);
-    }
+// ---------------------------------------------------------------------------
+// Tela: Relatório de Estoque (filtros + resultado)
+// ---------------------------------------------------------------------------
+function RelatorioEstoqueTela() {
+  const [f, setF] = useState(FILTROS_INICIAIS);
+  const [resultado, setResultado] = useState(null);
+
+  const set = (campo, valor) => setF((atual) => ({ ...atual, [campo]: valor }));
+
+  const alternarNaLista = (campo, valor) =>
+    setF((atual) => ({
+      ...atual,
+      [campo]: atual[campo].includes(valor) ? atual[campo].filter((v) => v !== valor) : [...atual[campo], valor]
+    }));
+
+  const lojasVisiveis = useMemo(() => {
+    const termo = normalizarTexto(f.buscaLoja);
+    return LOJAS.filter((l) => {
+      if (f.grupoLojas === 'ATIVAS' && !l.ativa) return false;
+      if (f.grupoLojas === 'INATIVAS' && l.ativa) return false;
+      return !termo || normalizarTexto(`${l.cod} ${l.nome}`).includes(termo);
+    });
+  }, [f.buscaLoja, f.grupoLojas]);
+
+  const todasMarcadas = lojasVisiveis.length > 0 && lojasVisiveis.every((l) => f.lojas.includes(l.cod));
+
+  const alternarTodas = () => {
+    const cods = lojasVisiveis.map((l) => l.cod);
+    setF((atual) => ({
+      ...atual,
+      lojas: todasMarcadas ? atual.lojas.filter((c) => !cods.includes(c)) : Array.from(new Set([...atual.lojas, ...cods]))
+    }));
   };
 
-  useEffect(() => {
-    carregarDados();
-  }, []);
-
-  // Fecha menus flutuantes ao clicar fora ou apertar Escape
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setSerialAbertoId(null);
-        setPopoverPlanoId(null);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const handleMudarPlano = (novoPlano) => {
-    setPlanoVisualizacao(novoPlano);
-    localStorage.setItem('syscor_plano_visualizacao', novoPlano);
+  const limpar = () => {
+    setF(FILTROS_INICIAIS);
+    setResultado(null);
   };
 
-  const resetarBaseDemo = () => {
-    localStorage.removeItem('syscor_estoque');
-    localStorage.removeItem('syscor_imei');
-    localStorage.removeItem('syscor_matriz_precos');
-    setEstoque(estoqueDemo);
-    setSeriais(imeiDemo);
-    setSerialAbertoId(null);
-    setPopoverPlanoId(null);
-    setFeedback({ tipo: 'sucesso', mensagem: 'Catálogo e seriais restaurados com sucesso!' });
-    setTimeout(() => setFeedback({ tipo: '', mensagem: '' }), 4000);
-  };
+  const gerar = () => {
+    const estoque = lerLS('syscor_estoque', estoqueDemo);
+    const seriais = lerLS('syscor_imei', imeiDemo);
 
-  // =========================================================================
-  // IMPORTAÇÃO COMPLETA DE TODOS OS PLANOS (COLUNAS J ATÉ R)
-  // =========================================================================
-  const handleSelecionarArquivo = async (e) => {
-    const arquivo = e.target.files?.[0];
-    if (!arquivo) return;
+    const linhas = estoque
+      .map((i) => {
+        const saldo = Number(i.saldo) || 0;
+        const min = Number(i.min) || 2;
+        const status = saldo <= 0 ? 'Ruptura' : saldo <= min ? 'Crítico' : 'Disponível';
+        const listaSeriais = seriais
+          .filter(
+            (s) =>
+              normalizarTexto(s.sku) === normalizarTexto(i.sku) &&
+              (!s.status || String(s.status).toUpperCase() !== 'VENDIDO')
+          )
+          .map((s) => s.imei || s.imeiOuSerial)
+          .filter((x) => x && x !== '—');
 
-    setCarregandoArquivo(true);
-
-    try {
-      const arrayBuffer = await arquivo.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-
-      const nomeAba = workbook.SheetNames.find(s => s.trim().toUpperCase() === 'SMARTPHONES')
-        || workbook.SheetNames.find(s => s.toUpperCase().includes('SMARTPHONE'))
-        || workbook.SheetNames[0];
-
-      const worksheet = workbook.Sheets[nomeAba];
-      if (!worksheet) throw new Error(`Aba "${nomeAba}" não encontrada.`);
-
-      const linhas = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-      if (!linhas || linhas.length < 4) throw new Error('A planilha não possui linhas suficientes.');
-
-      let idxLinhaCabecalho = 2;
-      let colNome = 5;
-
-      for (let r = 0; r < Math.min(10, linhas.length); r++) {
-        const linhaStr = (linhas[r] || []).map(c => normalizarTexto(c));
-        const pNome = linhaStr.findIndex(c => c.includes('nome comercial'));
-        if (pNome !== -1) {
-          idxLinhaCabecalho = r;
-          colNome = pNome;
-          break;
-        }
-      }
-
-      const mapaPlanosAparelhos = {};
-
-      for (let r = idxLinhaCabecalho + 1; r < linhas.length; r++) {
-        const linha = linhas[r];
-        if (!linha || linha.length === 0) continue;
-
-        const nome = String(linha[colNome] || '').trim();
-        if (!nome) continue;
-
-        const pPre = parsePreco(linha[9]);
-        if (pPre <= 0) continue;
-
-        const precosPorPlano = {
-          pre: pPre,
-          controleBtl: parsePreco(linha[10]) || pPre,
-          controleEntrada: parsePreco(linha[11]) || pPre,
-          controleAltoValor: parsePreco(linha[12]) || pPre,
-          posIndividual: parsePreco(linha[13]) || pPre,
-          familia2: parsePreco(linha[14]) || pPre,
-          familia3: parsePreco(linha[15]) || pPre,
-          familia45: parsePreco(linha[16]) || pPre,
-          vivoV: parsePreco(linha[17]) || pPre
+        return {
+          loja: i.loja || '',
+          sku: i.sku,
+          nome: i.nome,
+          tipo: tipoDoItem(i.cat),
+          saldo,
+          status,
+          valor: saldo * (Number(i.preco) || 0),
+          seriais: listaSeriais.join(', ')
         };
+      })
+      .filter((l) => !f.somenteDisponivel || l.saldo > 0)
+      .filter((l) => f.lojas.length === 0 || !l.loja || f.lojas.includes(l.loja))
+      .filter((l) => f.tipos.length === 0 || f.tipos.includes(l.tipo))
+      .filter((l) => f.status === 'TODOS' || l.status === f.status);
 
-        mapaPlanosAparelhos[normalizarTexto(nome)] = precosPorPlano;
-      }
-
-      let atualizados = 0;
-      const estoqueAtualizado = estoque.map((item) => {
-        const nomeNorm = normalizarTexto(item.nome);
-        let tabelaItem = mapaPlanosAparelhos[nomeNorm];
-
-        if (!tabelaItem) {
-          const matchChave = Object.keys(mapaPlanosAparelhos).find(k => 
-            (k.length >= 6 && nomeNorm.includes(k)) || 
-            (nomeNorm.length >= 6 && k.includes(nomeNorm))
-          );
-          if (matchChave) tabelaItem = mapaPlanosAparelhos[matchChave];
-        }
-
-        if (tabelaItem) {
-          atualizados++;
-          return {
-            ...item,
-            preco: tabelaItem.pre,
-            precosPlano: tabelaItem
-          };
-        }
-        return item;
-      });
-
-      const seriaisAtualizados = seriais.map((item) => {
-        const nomeNorm = normalizarTexto(item.nome || item.descricao);
-        let tabelaItem = mapaPlanosAparelhos[nomeNorm];
-
-        if (!tabelaItem) {
-          const matchChave = Object.keys(mapaPlanosAparelhos).find(k => 
-            (k.length >= 6 && nomeNorm.includes(k)) || 
-            (nomeNorm.length >= 6 && k.includes(nomeNorm))
-          );
-          if (matchChave) tabelaItem = mapaPlanosAparelhos[matchChave];
-        }
-
-        if (tabelaItem) {
-          return {
-            ...item,
-            preco: tabelaItem.pre,
-            valorUnitario: tabelaItem.pre,
-            precosPlano: tabelaItem
-          };
-        }
-        return item;
-      });
-
-      localStorage.setItem('syscor_estoque', JSON.stringify(estoqueAtualizado));
-      localStorage.setItem('syscor_imei', JSON.stringify(seriaisAtualizados));
-      localStorage.setItem('syscor_matriz_precos', JSON.stringify(mapaPlanosAparelhos));
-
-      setEstoque(estoqueAtualizado);
-      setSeriais(seriaisAtualizados);
-
-      setFeedback({
-        tipo: 'sucesso',
-        mensagem: `Planilha oficial processada com sucesso! ${atualizados} modelos sincronizados com a matriz Vivo.`
-      });
-      setTimeout(() => setFeedback({ tipo: '', mensagem: '' }), 6000);
-
-    } catch (err) {
-      setFeedback({
-        tipo: 'erro',
-        mensagem: 'Erro ao processar planilha: ' + (err.message || 'Verifique o formato do arquivo.')
-      });
-    } finally {
-      setCarregandoArquivo(false);
-      e.target.value = '';
-    }
+    setResultado(linhas);
   };
 
-  const estoqueUnificado = useMemo(() => {
-    return (estoque || []).map((item) => {
-      const nomeNorm = normalizarTexto(item.nome);
-      const skuNorm = normalizarTexto(item.sku);
+  const colunas = [
+    { key: 'sku', label: 'SKU', mono: true },
+    { key: 'nome', label: 'Produto' },
+    { key: 'tipo', label: 'Tipo' },
+    { key: 'status', label: 'Status', badge: true },
+    { key: 'saldo', label: 'Saldo', align: 'right', fmt: (v) => `${v} un` },
+    { key: 'valor', label: 'Valor em estoque', align: 'right', fmt: (v) => moeda.format(v) },
+    ...(f.visao === 'DETALHADO' ? [{ key: 'seriais', label: 'IMEIs / Seriais' }] : [])
+  ];
 
-      const seriaisAssociados = (seriais || []).filter((s) => {
-        const sSkuNorm = normalizarTexto(s.sku);
-        const sNomeNorm = normalizarTexto(s.nome || s.descricao);
+  const exportarCSV = () => {
+    if (!resultado || resultado.length === 0) return;
+    const aspas = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const cab = colunas.map((c) => aspas(c.label)).join(';');
+    const corpo = resultado.map((l) => colunas.map((c) => aspas(l[c.key])).join(';')).join('\n');
+    const blob = new Blob(['\uFEFF' + cab + '\n' + corpo], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio_estoque_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-        if (sSkuNorm && sSkuNorm === skuNorm) return true;
-        if (nomeNorm.length >= 5 && sNomeNorm.includes(nomeNorm)) return true;
-        if (sNomeNorm.length >= 5 && nomeNorm.includes(sNomeNorm)) return true;
-
-        return false;
-      });
-
-      const disponiveis = seriaisAssociados.filter(
-        (s) => !s.status || s.status.toUpperCase() !== 'VENDIDO'
-      );
-
-      const precoDinamico = item.precosPlano?.[planoVisualizacao] || item.preco || 0;
-
-      return {
-        ...item,
-        precoVisualizacao: precoDinamico,
-        seriaisDisponiveis: disponiveis.map((s) => s.imei || s.imeiOuSerial).filter((im) => im && im !== '—')
-      };
-    });
-  }, [estoque, seriais, planoVisualizacao]);
-
-  const estoqueFiltrado = useMemo(() => {
-    return estoqueUnificado.filter((item) => {
-      const termo = busca.toLowerCase().trim();
-      const bateBusca =
-        !termo ||
-        item.nome.toLowerCase().includes(termo) ||
-        item.sku.toLowerCase().includes(termo) ||
-        (item.cat && item.cat.toLowerCase().includes(termo)) ||
-        item.seriaisDisponiveis.some((imei) => String(imei).includes(termo));
-
-      const bateCategoria =
-        filtroCategoria === 'TODAS' ||
-        (item.cat && item.cat.toUpperCase().includes(filtroCategoria));
-
-      return bateBusca && bateCategoria;
-    });
-  }, [estoqueUnificado, busca, filtroCategoria]);
-
-  const totaisGerais = useMemo(() => {
-    const totalItens = estoqueFiltrado.reduce((acc, i) => acc + (i.saldo || 0), 0);
-    const valorEstoque = estoqueFiltrado.reduce((acc, i) => acc + ((i.saldo || 0) * (i.precoVisualizacao || 0)), 0);
-    const emRuptura = estoqueFiltrado.filter((i) => (i.saldo || 0) <= 0).length;
-
-    return { totalItens, valorEstoque, emRuptura };
-  }, [estoqueFiltrado]);
+  const totalSaldo = (resultado || []).reduce((acc, l) => acc + l.saldo, 0);
+  const totalValor = (resultado || []).reduce((acc, l) => acc + l.valor, 0);
 
   return (
-    <section className="view" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleSelecionarArquivo}
-        accept=".xlsx,.xls,.csv"
-        style={{ display: 'none' }}
-      />
-
-      {/* Topbar */}
-      <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Package size={24} color="var(--accent)" />
-            Controle de Estoque
-          </h1>
-          <div className="sub" style={{ marginTop: 4, color: 'var(--text-faint)' }}>
-            Visão consolidada de saldos físicos, seriais e precificação multissubsídio Vivo
+    <div style={{ borderTop: '1px solid var(--line)' }}>
+      <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {/* Cabeçalho da tela */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <FileBarChart size={20} color="var(--accent, #c026d3)" />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Relatório de Estoque</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>Ajuste os filtros e gere o relatório</div>
           </div>
         </div>
 
-        <div className="topbar-actions" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <button
-            type="button"
-            className="btn sm solid"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={carregandoArquivo}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            {carregandoArquivo ? <Loader2 size={14} className="spin" /> : <Upload size={14} />}
-            {carregandoArquivo ? 'Processando...' : 'Importar Planilha Vivo (.xlsx)'}
-          </button>
+        {/* Busca por estoque */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={f.somenteDisponivel}
+            onChange={(e) => set('somenteDisponivel', e.target.checked)}
+          />
+          Somente itens com saldo disponível
+        </label>
 
-          <button
-            type="button"
-            className="btn sm ghost"
-            onClick={resetarBaseDemo}
-            title="Recarregar catálogo e seriais completos"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            <RotateCcw size={14} /> Restaurar Padrão
-          </button>
+        {/* Lojas */}
+        <div style={estiloSecao}>
+          <span style={estiloLabel}>Lojas</span>
 
-          <button
-            type="button"
-            className="btn sm"
-            onClick={() => navigate('/estoque/inventario')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            <ArrowRightLeft size={14} /> Inventário SAP
-          </button>
-        </div>
-      </div>
-
-      {/* Alerta de Feedback */}
-      {feedback.mensagem && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 10,
-          padding: '12px 16px',
-          borderRadius: 8,
-          fontSize: 13.5,
-          fontWeight: 600,
-          background: feedback.tipo === 'erro' ? 'rgba(239, 68, 68, 0.15)' : 'var(--good-soft, rgba(34, 197, 94, 0.15))',
-          color: feedback.tipo === 'erro' ? 'var(--bad, #ef4444)' : 'var(--good, #22c55e)',
-          border: `1px solid ${feedback.tipo === 'erro' ? 'var(--bad, #ef4444)' : 'var(--good, #22c55e)'}`
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {feedback.tipo === 'erro' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
-            <span>{feedback.mensagem}</span>
-          </div>
-          <button 
-            type="button" 
-            onClick={() => setFeedback({ tipo: '', mensagem: '' })}
-            style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer' }}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
-      {/* Cards Rápidos */}
-      <div className="kpi-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-        <div className="kpi">
-          <div className="lbl">Saldo Físico Geral</div>
-          <div className="val mono">{totaisGerais.totalItens} un</div>
-          <div className="delta up">{estoqueFiltrado.length} modelos listados</div>
-        </div>
-
-        <div className="kpi">
-          <div className="lbl">Valor Total em Estoque</div>
-          <div className="val mono">{formatadorMoeda.format(totaisGerais.valorEstoque)}</div>
-          <div className="delta up">
-            Plano: {OPCOES_PLANOS.find(p => p.id === planoVisualizacao)?.label}
-          </div>
-        </div>
-
-        <div className="kpi">
-          <div className="lbl">Itens em Ruptura / Críticos</div>
-          <div className="val mono" style={{ color: totaisGerais.emRuptura > 0 ? 'var(--bad)' : 'var(--good)' }}>
-            {totaisGerais.emRuptura} itens
-          </div>
-          <div className="delta down">{totaisGerais.emRuptura > 0 ? 'Exige reposição' : 'Regular'}</div>
-        </div>
-      </div>
-
-      {/* Painel Tabela Unificada */}
-      <div className="panel" style={{ padding: 0, overflow: 'visible' }}>
-        
-        {/* Filtros: Categoria, Seletor de Plano da Vivo e Busca */}
-        <div style={{
-          padding: '14px 20px',
-          borderBottom: '1px solid var(--line)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 12
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
             <select
-              value={filtroCategoria}
-              onChange={(e) => setFiltroCategoria(e.target.value)}
-              style={{ minHeight: 36, height: 'auto', fontSize: 13 }}
+              value={f.grupoLojas}
+              onChange={(e) => set('grupoLojas', e.target.value)}
+              style={{ minHeight: 34, height: 'auto', fontSize: 13 }}
             >
-              <option value="TODAS">Todas as Categorias</option>
-              <option value="PRODUTO">Smartphones / Aparelhos</option>
-              <option value="ACESS">Acessórios</option>
+              <option value="TODAS">Todas as lojas</option>
+              <option value="ATIVAS">Somente ativas</option>
+              <option value="INATIVAS">Somente inativas</option>
             </select>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-faint)' }}>Modalidade:</span>
-              <select
-                value={planoVisualizacao}
-                onChange={(e) => handleMudarPlano(e.target.value)}
-                style={{
-                  minHeight: 36,
-                  height: 'auto',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  borderColor: 'var(--accent, #7c3aed)',
-                  color: 'var(--accent, #7c3aed)'
-                }}
-              >
-                {OPCOES_PLANOS.map((plano) => (
-                  <option key={plano.id} value={plano.id}>
-                    {plano.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <button
+              type="button"
+              className="btn sm ghost"
+              onClick={() => setF((a) => ({ ...a, grupoLojas: 'TODAS', buscaLoja: '', lojas: [] }))}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <RotateCcw size={13} /> Redefinir filtros
+            </button>
           </div>
 
-          <div style={{ position: 'relative', width: 300 }}>
+          <div style={{ position: 'relative' }}>
             <Search size={15} style={{ position: 'absolute', left: 12, top: 11, color: 'var(--text-faint)' }} />
             <input
               type="text"
-              placeholder="Buscar por modelo, SKU ou serial..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              style={{ paddingLeft: 36, height: 36, fontSize: 13 }}
+              placeholder="Filtrar lojas..."
+              value={f.buscaLoja}
+              onChange={(e) => set('buscaLoja', e.target.value)}
+              style={{ paddingLeft: 36, height: 36, fontSize: 13, width: '100%' }}
             />
+          </div>
+
+          <div
+            style={{
+              border: '1px solid var(--line)',
+              borderRadius: 8,
+              padding: 12,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10
+            }}
+          >
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700 }}>
+              <input type="checkbox" checked={todasMarcadas} onChange={alternarTodas} />
+              Selecionar todas
+              <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}>({f.lojas.length} marcadas)</span>
+            </label>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
+                gap: 6,
+                maxHeight: 220,
+                overflowY: 'auto'
+              }}
+            >
+              {lojasVisiveis.map((l) => {
+                const marcada = f.lojas.includes(l.cod);
+                return (
+                  <label
+                    key={l.cod}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 8px',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      border: `1px solid ${marcada ? 'var(--accent, #7c3aed)' : 'var(--line-soft, #332a4d)'}`,
+                      background: marcada ? 'var(--panel-2, #261f3d)' : 'transparent',
+                      color: l.ativa ? 'var(--text)' : 'var(--bad, #ef4444)'
+                    }}
+                  >
+                    <input type="checkbox" checked={marcada} onChange={() => alternarNaLista('lojas', l.cod)} />
+                    {l.cod} - {l.nome}
+                  </label>
+                );
+              })}
+              {lojasVisiveis.length === 0 && (
+                <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>Nenhuma loja encontrada.</span>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="table-wrap" style={{ overflow: 'visible' }}>
-          <table style={{ margin: 0 }}>
-            <thead>
-              <tr>
-                <th style={{ width: 110 }}>Status</th>
-                <th style={{ width: 120 }}>SKU / Código</th>
-                <th>Descrição do Aparelho / Item</th>
-                <th>Categoria</th>
-                <th style={{ textAlign: 'center', width: 100 }}>Estoque Mín.</th>
-                <th style={{ textAlign: 'right', width: 110 }}>Saldo Físico</th>
-                <th style={{ minWidth: 260 }}>IMEIs / Seriais Disponíveis</th>
-                <th style={{ textAlign: 'right', width: 170 }}>
-                  Preço ({OPCOES_PLANOS.find(p => p.id === planoVisualizacao)?.label.replace('Tabela Regular ', '')})
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {estoqueFiltrado.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-faint)' }}>
-                    Nenhum item localizado.
-                  </td>
-                </tr>
-              ) : (
-                estoqueFiltrado.map((item) => {
-                  const saldoZerado = (item.saldo || 0) <= 0;
-                  const saldoCritico = !saldoZerado && (item.saldo || 0) <= (item.min || 2);
-                  const isMenuAberto = serialAbertoId === item.sku;
-                  const isPopoverAberto = popoverPlanoId === item.sku;
+        {/* Visão */}
+        <div style={estiloSecao}>
+          <span style={estiloLabel}>Visão</span>
+          <select
+            value={f.visao}
+            onChange={(e) => set('visao', e.target.value)}
+            style={{ minHeight: 36, height: 'auto', fontSize: 13, maxWidth: 320 }}
+          >
+            <option value="RESUMO">Resumo Simples</option>
+            <option value="DETALHADO">Detalhado (com seriais)</option>
+          </select>
+        </div>
 
-                  return (
-                    <tr key={item.sku} style={{ opacity: saldoZerado ? 0.75 : 1 }}>
-                      <td>
-                        {saldoZerado ? (
-                          <span className="badge bad">Ruptura</span>
-                        ) : saldoCritico ? (
-                          <span className="badge warn">Crítico</span>
-                        ) : (
-                          <span className="badge good">Disponível</span>
-                        )}
-                      </td>
+        {/* Tipo de produto */}
+        <div style={estiloSecao}>
+          <span style={estiloLabel}>Tipo de Produto</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {TIPOS_PRODUTO.map((t) => {
+              const marcado = f.tipos.includes(t);
+              return (
+                <label
+                  key={t}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    fontSize: 12.5,
+                    cursor: 'pointer',
+                    border: `1px solid ${marcado ? 'var(--accent, #7c3aed)' : 'var(--line, #382d54)'}`,
+                    background: marcado ? 'var(--panel-2, #261f3d)' : 'transparent'
+                  }}
+                >
+                  <input type="checkbox" checked={marcado} onChange={() => alternarNaLista('tipos', t)} />
+                  {t}
+                </label>
+              );
+            })}
+          </div>
+        </div>
 
-                      <td className="mono"><b>{item.sku}</b></td>
-                      <td><b>{item.nome}</b></td>
-                      <td style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>{item.cat}</td>
-                      <td style={{ textAlign: 'center', color: 'var(--text-faint)' }}>{item.min} un</td>
+        {/* Status */}
+        <div style={estiloSecao}>
+          <span style={estiloLabel}>Status</span>
+          <select
+            value={f.status}
+            onChange={(e) => set('status', e.target.value)}
+            style={{ minHeight: 36, height: 'auto', fontSize: 13, maxWidth: 320 }}
+          >
+            <option value="TODOS">Todos</option>
+            <option value="Disponível">Disponível</option>
+            <option value="Crítico">Crítico</option>
+            <option value="Ruptura">Ruptura</option>
+          </select>
+        </div>
 
-                      <td style={{ textAlign: 'right' }} className="mono">
-                        <b style={{ fontSize: 14, color: saldoZerado ? 'var(--bad)' : 'var(--text)' }}>
-                          {item.saldo} un
-                        </b>
-                      </td>
+        {/* Resultado */}
+        {resultado && (
+          <div style={{ border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
+            <div
+              style={{
+                padding: '10px 14px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 16,
+                fontSize: 12.5,
+                color: 'var(--text-faint)',
+                borderBottom: '1px solid var(--line)'
+              }}
+            >
+              <span>{resultado.length} itens</span>
+              <span>Saldo total: <b style={{ color: 'var(--text)' }}>{totalSaldo} un</b></span>
+              <span>Valor total: <b style={{ color: 'var(--text)' }}>{moeda.format(totalValor)}</b></span>
+            </div>
 
-                      {/* Coluna de Seriais com Dropdown */}
-                      <td style={{ position: 'relative' }}>
-                        {item.seriaisDisponiveis && item.seriaisDisponiveis.length > 0 ? (
-                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                            {item.seriaisDisponiveis.slice(0, 2).map((serial) => (
-                              <span
-                                key={serial}
-                                className="mono"
-                                style={{
-                                  background: 'var(--panel-2, #1c1730)',
-                                  border: '1px solid var(--line-soft, #332a4d)',
-                                  padding: '2px 7px',
-                                  borderRadius: 4,
-                                  fontSize: 11.5,
-                                  color: 'var(--accent, #c026d3)',
-                                  fontWeight: 600
-                                }}
-                              >
-                                {serial}
-                              </span>
-                            ))}
-
-                            {item.seriaisDisponiveis.length > 2 && (
-                              <div style={{ position: 'relative', display: 'inline-block' }}>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSerialAbertoId(isMenuAberto ? null : item.sku);
-                                    setPopoverPlanoId(null);
-                                  }}
-                                  className="btn sm"
-                                  style={{
-                                    padding: '2px 8px',
-                                    height: 24,
-                                    fontSize: 11,
-                                    fontWeight: 700,
-                                    background: 'var(--panel-2)',
-                                    color: 'var(--text)',
-                                    border: '1px solid var(--line)',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 3
-                                  }}
-                                >
-                                  +{item.seriaisDisponiveis.length - 2} seriais
-                                  <ChevronDown size={12} />
-                                </button>
-
-                                {isMenuAberto && (
-                                  <div
-                                    onClick={(e) => e.stopPropagation()}
-                                    style={{
-                                      position: 'absolute',
-                                      top: 'calc(100% + 4px)',
-                                      left: 0,
-                                      zIndex: 99999,
-                                      minWidth: 230,
-                                      background: 'var(--panel, #181329)',
-                                      border: '1px solid var(--line, #382d54)',
-                                      borderRadius: 8,
-                                      padding: '10px 12px',
-                                      boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      gap: 6
-                                    }}
-                                  >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                      <span style={{ fontSize: 11, color: 'var(--text-faint)', fontWeight: 700, textTransform: 'uppercase' }}>
-                                        Seriais em Estoque ({item.seriaisDisponiveis.length})
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => setSerialAbertoId(null)}
-                                        style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 0 }}
-                                      >
-                                        <X size={14} />
-                                      </button>
-                                    </div>
-                                    <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                      {item.seriaisDisponiveis.map((serialCompleto) => (
-                                        <div
-                                          key={serialCompleto}
-                                          className="mono"
-                                          style={{
-                                            fontSize: 12,
-                                            padding: '4px 6px',
-                                            borderRadius: 4,
-                                            background: 'var(--panel-2)',
-                                            color: 'var(--text)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between'
-                                          }}
-                                        >
-                                          <span>{serialCompleto}</span>
-                                          <CheckCircle2 size={12} color="var(--good, #22c55e)" />
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>—</span>
-                        )}
-                      </td>
-
-                      {/* Coluna Preço por Plano com Popover Comparativo */}
-                      <td style={{ textAlign: 'right', position: 'relative' }} className="mono">
-                        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                          <b style={{ color: 'var(--text)', fontSize: 13.5 }}>
-                            {formatadorMoeda.format(item.precoVisualizacao || 0)}
-                          </b>
-
-                          {item.precosPlano && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPopoverPlanoId(isPopoverAberto ? null : item.sku);
-                                setSerialAbertoId(null);
-                              }}
-                              title="Ver comparativo de preços por plano"
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                                padding: 2,
-                                color: isPopoverAberto ? 'var(--accent, #c026d3)' : 'var(--accent, #7c3aed)'
-                              }}
-                            >
-                              <HelpCircle size={14} />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Janela Popover de Comparativo de Todos os Planos */}
-                        {isPopoverAberto && item.precosPlano && (
-                          <div
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              position: 'absolute',
-                              top: 'calc(100% + 4px)',
-                              right: 0,
-                              zIndex: 99999,
-                              minWidth: 260,
-                              background: 'var(--panel, #181329)',
-                              border: '1px solid var(--line, #382d54)',
-                              borderRadius: 8,
-                              padding: '12px',
-                              boxShadow: '0 12px 28px rgba(0,0,0,0.5)',
-                              textAlign: 'left'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                              <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--accent, #c026d3)' }}>
-                                PREÇOS: {item.nome}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setPopoverPlanoId(null)}
-                                style={{ background: 'transparent', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: 0 }}
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
-                              {OPCOES_PLANOS.map((p) => (
-                                <div
-                                  key={p.id}
-                                  style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    padding: '3px 6px',
-                                    borderRadius: 4,
-                                    background: planoVisualizacao === p.id ? 'var(--panel-2, #261f3d)' : 'transparent',
-                                    fontWeight: planoVisualizacao === p.id ? 700 : 400
-                                  }}
-                                >
-                                  <span style={{ color: 'var(--text-dim)' }}>{p.label}:</span>
-                                  <span className="mono">
-                                    {formatadorMoeda.format(item.precosPlano[p.id] || item.preco || 0)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+            <div className="table-wrap" style={{ overflow: 'auto', maxHeight: 420 }}>
+              <table style={{ margin: 0 }}>
+                <thead>
+                  <tr>
+                    {colunas.map((c) => (
+                      <th key={c.key} style={{ textAlign: c.align || 'left', whiteSpace: 'nowrap' }}>{c.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {resultado.length === 0 ? (
+                    <tr>
+                      <td colSpan={colunas.length} style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-faint)' }}>
+                        Nenhum item encontrado com esses filtros.
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    resultado.map((l, idx) => (
+                      <tr key={`${l.sku}-${idx}`}>
+                        {colunas.map((c) => {
+                          if (c.badge) {
+                            const cls = l.status === 'Ruptura' ? 'bad' : l.status === 'Crítico' ? 'warn' : 'good';
+                            return <td key={c.key}><span className={`badge ${cls}`}>{l.status}</span></td>;
+                          }
+                          return (
+                            <td
+                              key={c.key}
+                              className={c.mono || c.align === 'right' ? 'mono' : undefined}
+                              style={{ textAlign: c.align || 'left', whiteSpace: c.key === 'seriais' ? 'normal' : 'nowrap' }}
+                            >
+                              {c.fmt ? c.fmt(l[c.key]) : l[c.key] || '—'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Barra de ações fixa no rodapé da tela */}
+      <div
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 8,
+          padding: '12px 20px',
+          borderTop: '1px solid var(--line)',
+          background: 'var(--panel, #181329)',
+          borderRadius: '0 0 12px 12px'
+        }}
+      >
+        <button type="button" className="btn sm ghost" onClick={limpar} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Eraser size={14} /> Limpar filtros
+        </button>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            className="btn sm"
+            onClick={exportarCSV}
+            disabled={!resultado || resultado.length === 0}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Download size={14} /> Exportar CSV
+          </button>
+          <button type="button" className="btn sm solid" onClick={gerar} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <FileBarChart size={14} /> Gerar relatório
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lista de relatórios (cards)
+// ---------------------------------------------------------------------------
+const RELATORIOS = [
+  { id: 'compras', titulo: 'Compras', descricao: 'Visualizar relatório das entradas de produtos realizadas nas filiais.' },
+  { id: 'estoque', titulo: 'Estoque', descricao: 'Visualizar relatório do estoque da revenda e de suas filiais.', tela: RelatorioEstoqueTela },
+  { id: 'saida-produtos', titulo: 'Saída de Produtos', descricao: 'Visualiza o relatório de produtos que saíram do estoque por outros motivos seja por devolução ou roubo.' },
+  { id: 'situacao', titulo: 'Situação', descricao: 'Visualiza a situação completa de um determinado produto, desde a compra, transferência até a venda.' },
+  { id: 'tabela-precos', titulo: 'Tabela de Preços', descricao: 'Relatório dos produtos com seus respectivos valores de venda.' }
+];
+
+export default function RelatoriosEstoque() {
+  const navigate = useNavigate();
+  const [telaAtual, setTelaAtual] = useState(null); // null = lista de cards
+  const [aberto, setAberto] = useState(null);
+
+  const relatorioAtivo = RELATORIOS.find((r) => r.id === telaAtual);
+
+  // Outra tela: substitui a lista de cards
+  if (relatorioAtivo?.tela) {
+    const Tela = relatorioAtivo.tela;
+    return (
+      <section className="view" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div>
+          <button
+            type="button"
+            className="btn sm ghost"
+            onClick={() => setTelaAtual(null)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <ArrowLeft size={14} /> Voltar aos relatórios
+          </button>
+        </div>
+
+        <div className="panel" style={{ padding: 0, borderRadius: 12, border: '1px solid var(--line)' }}>
+          <Tela />
+        </div>
+      </section>
+    );
+  }
+
+  const abrirRelatorio = (r) => {
+    if (r.tela) setTelaAtual(r.id);
+    else navigate(`/relatorios/${r.id}`);
+  };
+
+  return (
+    <section className="view" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {RELATORIOS.map((r) => {
+        const isAberto = aberto === r.id;
+
+        return (
+          <div
+            key={r.id}
+            className="panel"
+            style={{
+              padding: 0,
+              borderRadius: 12,
+              border: `1px solid ${isAberto ? 'var(--accent, #7c3aed)' : 'var(--line)'}`
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <span
+                  style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent, #c026d3)', marginTop: 7, flexShrink: 0 }}
+                />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--accent, #c026d3)' }}>{r.titulo}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{r.descricao}</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <button type="button" className="btn sm" onClick={() => abrirRelatorio(r)}>
+                  Avaliar
+                </button>
+
+                <button
+                  type="button"
+                  aria-label={isAberto ? 'Recolher' : 'Expandir'}
+                  aria-expanded={isAberto}
+                  onClick={() => setAberto(isAberto ? null : r.id)}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, display: 'flex' }}
+                >
+                  <ChevronDown
+                    size={16}
+                    color="var(--text-faint)"
+                    style={{ transform: isAberto ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {isAberto && (
+              <div style={{ borderTop: '1px solid var(--line)', padding: '16px 18px', color: 'var(--text-faint)', fontSize: 13 }}>
+                {r.descricao}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }

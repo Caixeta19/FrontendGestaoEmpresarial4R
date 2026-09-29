@@ -19,6 +19,26 @@ export default function HeaderVivoGO({ sidebarAberta, setSidebarAberta, session 
   const nomeExibicao = (session?.nome || 'GUILHERME DE QUEIROZ').toUpperCase();
   const nomeTruncado = nomeExibicao.length > 17 ? nomeExibicao.slice(0, 17) + '...' : nomeExibicao;
 
+  // Abre a janela limpa do WhatsApp Chat independente
+  const abrirJanelaChat = () => {
+    const largura = Math.min(1360, window.screen.availWidth * 0.9);
+    const altura = Math.min(850, window.screen.availHeight * 0.9);
+    const esquerda = (window.screen.availWidth - largura) / 2;
+    const topo = (window.screen.availHeight - altura) / 2;
+
+    const popup = window.open(
+      '/#/whatsapp-chat',
+      'SyscorChatWhats',
+      `width=${largura},height=${altura},top=${topo},left=${esquerda},directories=no,titlebar=no,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes`
+    );
+
+    if (popup) {
+      popup.focus();
+    } else {
+      navigate('/whatsapp-chat');
+    }
+  };
+
   return (
     <header style={{
       height: 54,
@@ -32,7 +52,7 @@ export default function HeaderVivoGO({ sidebarAberta, setSidebarAberta, session 
       userSelect: 'none',
       zIndex: 50
     }}>
-      {/* Esquerda: Botão recolher + Logo vivo GO */}
+      {/* Esquerda: Botão recolher + Logo 4R Solutions + Busca */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <button
           type="button"
@@ -51,7 +71,7 @@ export default function HeaderVivoGO({ sidebarAberta, setSidebarAberta, session 
           {sidebarAberta ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
         </button>
 
-        {/* Logo vivo GO roxo */}
+        {/* Logo 4R Solutions */}
         <div 
           onClick={() => navigate('/')}
           style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
@@ -96,19 +116,19 @@ export default function HeaderVivoGO({ sidebarAberta, setSidebarAberta, session 
         </div>
       </div>
 
-      {/* Direita: Ícones de Ação Rápida e Perfil */}
+      {/* Direita: Ações Rápidas (sem o botão de tema) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         
-        {/* Ícone Brilho / IA */}
+        {/* Assistente IA */}
         <button 
           type="button" 
           title="Assistente IA"
-          style={{ background: 'transparent', border: 'none', color: '#c084fc', cursor: 'pointer' }}
+          style={{ background: 'transparent', border: 'none', color: '#c084fc', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
           <Sparkles size={17} />
         </button>
 
-        {/* Seletor de UF/Filial */}
+        {/* Seletor de Filial / UF */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -127,26 +147,26 @@ export default function HeaderVivoGO({ sidebarAberta, setSidebarAberta, session 
           <ChevronDown size={13} color="#94a3b8" />
         </div>
 
-        {/* Suporte / Fone */}
+        {/* Suporte */}
         <button 
           type="button" 
           title="Atendimento & Suporte"
-          style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer' }}
+          style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
           <Headphones size={18} />
         </button>
 
-        {/* Celular / SIM */}
+        {/* Aparelhos / SIM */}
         <button 
           type="button" 
           title="Linhas e Aparelhos"
-          style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer' }}
+          style={{ background: 'transparent', border: 'none', color: '#e2e8f0', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
           <Smartphone size={18} />
         </button>
 
         {/* Notificações com Badge 12 */}
-        <div style={{ position: 'relative', cursor: 'pointer' }}>
+        <div style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
           <Bell size={18} color="#e2e8f0" />
           <span style={{
             position: 'absolute',
@@ -164,10 +184,10 @@ export default function HeaderVivoGO({ sidebarAberta, setSidebarAberta, session 
           </span>
         </div>
 
-        {/* ATALHO DIRETO DO WHATSAPP COM BADGE 3 */}
+        {/* Atalho WhatsApp com Badge 4 (Abre janela independente) */}
         <div 
-          onClick={() => navigate('/whatsapp-chat')}
-          title="Abrir Chat WhatsApp Web"
+          onClick={abrirJanelaChat}
+          title="Abrir WhatsApp Chat em nova janela"
           style={{ position: 'relative', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
         >
           <MessageCircle size={19} color="#a855f7" />
@@ -175,15 +195,16 @@ export default function HeaderVivoGO({ sidebarAberta, setSidebarAberta, session 
             position: 'absolute',
             top: -6,
             right: -8,
-            background: '#c084fc',
-            color: '#120c1a',
-            fontSize: 9.5,
+            background: '#a855f7',
+            color: '#ffffff',
+            fontSize: '9.5px',
             fontWeight: 900,
-            borderRadius: 10,
+            borderRadius: '10px',
             padding: '1px 5px',
-            lineHeight: 1
+            lineHeight: 1,
+            boxShadow: '0 2px 5px rgba(168, 85, 247, 0.4)'
           }}>
-            3
+            4
           </span>
         </div>
 
