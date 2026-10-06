@@ -63,6 +63,7 @@ const navGroups = [
     label: 'Financeiro',
     icon: <DollarSign size={17} />,
     items: [
+      { to: '/financeiro/movimento', label: 'Movimento', icon: <PlusCircle size={15} /> }, // <--- Item de Menu Adicionado
       { to: '/financeiro/caixa', label: 'Caixa', icon: <WalletCards size={15} /> },
       { to: '/financeiro', label: 'Contas a Pagar', icon: <CreditCard size={15} /> },
       { to: '/financeiro/remuneracao', label: 'Remuneração Variável', icon: <TrendingUp size={15} /> },
@@ -174,31 +175,30 @@ export default function Sidebar({ setSession }: SidebarProps) {
           gap: 6
         }}>
           {/* Alternador de Tema */}
-          {/* Botão de Trocar Tema mantido na Sidebar */}
-<button
-  type="button"
-  className="nav-item"
-  style={{
-    width: '100%',
-    justifyContent: 'space-between',
-    border: '1px solid var(--line)',
-    background: 'var(--panel-2, rgba(255, 255, 255, 0.03))',
-    borderRadius: 6,
-    padding: '8px 12px',
-    margin: 0
-  }}
-  onClick={alternarTema}
->
-  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-    <span className="ic" style={{ display: 'inline-flex', alignItems: 'center' }}>
-      {tema === 'dark' ? <Moon size={15} /> : <Sun size={15} />}
-    </span>
-    Tema {tema === 'dark' ? 'Escuro' : 'Claro'}
-  </span>
-  <span style={{ fontSize: '10.5px', color: 'var(--text-faint)', textTransform: 'uppercase', fontWeight: 600 }}>
-    Trocar
-  </span>
-</button>
+          <button
+            type="button"
+            className="nav-item"
+            style={{
+              width: '100%',
+              justifyContent: 'space-between',
+              border: '1px solid var(--line)',
+              background: 'var(--panel-2, rgba(255, 255, 255, 0.03))',
+              borderRadius: 6,
+              padding: '8px 12px',
+              margin: 0
+            }}
+            onClick={alternarTema}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span className="ic" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                {tema === 'dark' ? <Moon size={15} /> : <Sun size={15} />}
+              </span>
+              Tema {tema === 'dark' ? 'Escuro' : 'Claro'}
+            </span>
+            <span style={{ fontSize: '10.5px', color: 'var(--text-faint)', textTransform: 'uppercase', fontWeight: 600 }}>
+              Trocar
+            </span>
+          </button>
 
           {/* Botão Sair */}
           <div 

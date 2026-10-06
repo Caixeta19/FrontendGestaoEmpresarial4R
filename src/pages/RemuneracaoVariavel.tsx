@@ -86,8 +86,8 @@ export default function RemuneracaoVariavel() {
           cpf: itemVivo.cpf,
           plano: itemVivo.plano,
           comissao: itemVivo.valorComissao,
-          status: 'GLOSADO_GED',
-          diagnosticoIa: 'Glosado/Bloqueado: Termo de adesão ou documento obrigatório não encontrado no GED'
+          status: 'PEDENTE_SISTEMA',
+          diagnosticoIa: 'Pendente Sistema: Venda não encontrada no sistema'
         });
       }
     });
@@ -137,7 +137,7 @@ export default function RemuneracaoVariavel() {
       ];
     } else if (abaFiltro === 'LIBERADOS') {
       unificados = resultadoAuditoria.liberados;
-    } else if (abaFiltro === 'GLOSADOS') {
+    } else if (abaFiltro === 'PENDENTE_SISTEMA') {
       unificados = resultadoAuditoria.glosadosGed;
     } else if (abaFiltro === 'PENDENTES_VIVO') {
       unificados = resultadoAuditoria.pendentesVivo;
@@ -329,9 +329,9 @@ export default function RemuneracaoVariavel() {
                               <CheckCircle2 size={12} /> Liberado
                             </span>
                           )}
-                          {item.status === 'GLOSADO_GED' && (
+                          {item.status === 'PEDENTE_SISTEMA' && (
                             <span className="badge bad" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <XCircle size={12} /> Glosa GED
+                              <XCircle size={12} /> Pendente Sistema
                             </span>
                           )}
                           {item.status === 'PENDENTE_VIVO' && (

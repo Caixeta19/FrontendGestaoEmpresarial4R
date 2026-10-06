@@ -7,7 +7,7 @@ import Sidebar from './components/Sidebar';
 
 // Páginas existentes
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';           // Geral -> Painel Inicial
+import Dashboard from './pages/Dashboard';          // Geral -> Painel Inicial
 import DashboardVendas from './pages/DashboardVendas';
 import ModuloVendas from './pages/ModuloVendas';     // Ecrã com os cartões e botões de venda
 import Venda from './pages/Venda';                   // Formulário de lançamento de venda
@@ -23,6 +23,7 @@ import RemuneracaoVariavel from './pages/RemuneracaoVariavel';
 import Documental from './pages/Documental';
 import Relatorios from './pages/Relatorios';
 import PowerBI from './pages/PowerBI';
+import Movimento from './pages/Movimento';
 import Mailing from './pages/Mailing';
 import WhatsAppChatCRM from './pages/WhatsAppChatCRM';
 
@@ -408,6 +409,7 @@ export default function App() {
           {/* 4. MÓDULO FINANCEIRO (CAIXA, CONTAS E COMISSÕES)          */}
           {/* ========================================================= */}
           <Route path="/financeiro" element={<Financeiro />} />
+          <Route path="/financeiro/movimento" element={<Movimento />} /> {/* <--- Rota Adicionada */}
           <Route path="/financeiro/caixa" element={<CaixaFinanceiro />} />
           <Route path="/financeiro/caixas" element={<CaixaFinanceiro />} />
           <Route path="/financeiro/caixas-abertos" element={<CaixaFinanceiro />} />
