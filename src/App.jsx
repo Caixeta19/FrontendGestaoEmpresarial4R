@@ -310,12 +310,15 @@ function LayoutPrivado({ session, setSession, temaEscuro, toggleTema }) {
 }
 
 export default function App() {
-  const [session, setSession] = useState({
-    filial: 'Matriz',
-    user: 'GC',
-    nome: 'Guilherme de Queiroz Caixeta',
-    role: 'Admin · Matriz'
+  // Sessão real: vem do login (POST /auth/login) e fica só na aba do navegador.
+  const [session, setSessionState] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('syscor_session') || 'null'); } catch { return null; }
   });
+  const setSession = (nova) => {
+    setSessionState(nova);
+    if (nova) sessionStorage.setItem('syscor_session', JSON.stringify(nova));
+    else sessionStorage.removeItem('syscor_session');
+  };
 
   const [temaEscuro, setTemaEscuro] = useState(() => {
     const salvo = localStorage.getItem('syscor_tema');

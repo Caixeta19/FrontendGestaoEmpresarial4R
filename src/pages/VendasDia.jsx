@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { listarVendas } from '../services/vendasApi';
 import { 
   ArrowLeft, 
   RefreshCw, 
@@ -14,28 +15,19 @@ export default function VendasDia() {
   const [dataHoje, setDataHoje] = useState('');
   const [vendas, setVendas] = useState([]);
 
-  // Carrega e formata a data atual e as vendas salvas no localStorage
-  const carregarVendas = () => {
-    const hoje = new Date();
-    const dataFormatada = hoje.toLocaleDateString('pt-BR');
-    setDataHoje(dataFormatada);
+  const [erro, setErro] = useState('');
 
-    const vendasSalvas = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
-    
-    if (vendasSalvas.length > 0) {
-      setVendas(vendasSalvas);
-    } else {
-      // Mock de demonstração inicial caso não haja vendas registradas
-      setVendas([
-        {
-          id: '000482',
-          data: `${dataFormatada} 16:35`,
-          filial: '0142 - LOJA SHOPPING CENTRO',
-          vendedor: 'GUILHERME CAIXETA',
-          cliente: 'JOÃO PEDRO MARTINS',
-          nf: '—'
-        }
-      ]);
+  // Vendas de hoje, direto da API
+  const carregarVendas = async () => {
+    const hoje = new Date();
+    setDataHoje(hoje.toLocaleDateString('pt-BR'));
+    const iso = new Date(hoje.getTime() - hoje.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    try {
+      setErro('');
+      setVendas(await listarVendas({ dataInicio: iso, dataFim: iso }));
+    } catch (e) {
+      setErro(e.mensagem || 'Falha ao carregar as vendas.');
+      setVendas([]);
     }
   };
 
@@ -45,16 +37,7 @@ export default function VendasDia() {
 
   // Redireciona para o formulário de lançamento de venda com os dados carregados
   const handleAcessarVenda = (venda) => {
-    sessionStorage.setItem('syscor_venda_edicao', JSON.stringify(venda));
-    navigate('/venda/lancar', {
-      state: {
-        vendaId: venda.id || venda.numeroVenda,
-        clienteNome: venda.cliente,
-        vendedorNome: venda.vendedor || venda.vendedorNome,
-        vendaCarregada: venda,
-        modoEdicao: true
-      }
-    });
+    navigate('/venda/lancar', { state: { vendaId: venda.vendaId, modoEdicao: true } });
   };
 
   return (
@@ -66,6 +49,12 @@ export default function VendasDia() {
       boxSizing: 'border-box',
       color: 'var(--text)'
     }}>
+      {erro && (
+        <div role="alert" style={{ border: '1px solid var(--bad, #ef4444)', color: 'var(--bad, #ef4444)', padding: '10px 16px', borderRadius: 8, fontSize: 13.5 }}>
+          {erro}
+        </div>
+      )}
+
       {/* CARD PRINCIPAL */}
       <div style={{
         background: 'var(--panel)',
@@ -285,7 +274,7 @@ export default function VendasDia() {
                       {/* BOTÃO CANCELAR */}
                       <button
                         type="button"
-                        onClick={() => alert(`Solicitação de cancelamento da venda ${venda.id || venda.numeroVenda}`)}
+                        onClick={() => handleAcessarVenda(venda)}
                         title="Cancelar Venda"
                         style={{
                           background: 'transparent',

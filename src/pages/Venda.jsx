@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Pencil, Plus, Trash2, CheckCircle, HelpCircle, X, Check } from 'lucide-react';
-import { PDVS, VENDEDORES, clientesDemo, imeiDemo, estoqueDemo } from '../data/demoData';
+import * as api from '../services/vendasApi';
 
 const CATEGORIAS_ITENS = [
   { id: 'PRODUTO_VIVO', rotulo: 'Produto Vivo' },
@@ -86,6 +86,16 @@ export default function Venda() {
   const [emailLogin, setEmailLogin] = useState('');
   const [senha, setSenha] = useState('');
 
+  // Integração com a API
+  const [vendaId, setVendaId] = useState(null);          // id da venda no backend (null = carrinho ainda não aberto)
+  const [filiais, setFiliais] = useState([]);
+  const [vendedores, setVendedores] = useState([]);
+  const [erro, setErro] = useState('');
+  const [clientesSugeridos, setClientesSugeridos] = useState([]);
+  const [aparelhosSugeridos, setAparelhosSugeridos] = useState([]);
+  const [acessoriosSugeridos, setAcessoriosSugeridos] = useState([]);
+  const inicioSalvoRef = useRef({ clienteId: null, filialId: null });
+
   // Carrinho
   const [itensPorCategoria, setItensPorCategoria] = useState({
     PRODUTO_VIVO: [],
@@ -153,68 +163,17 @@ export default function Venda() {
   });
 
   // =========================================================================
-  // CARREGAR DADOS DE VENDA REGISTRADA (VINDA DO BOTÃO AZUL FILEDIT)
+  // CATÁLOGOS (PDVs e vendedores) E VENDA EXISTENTE — tudo vindo da API
   // =========================================================================
   useEffect(() => {
-    const vendaRecebida = location.state?.vendaCarregada || JSON.parse(sessionStorage.getItem('syscor_venda_edicao') || 'null');
+    api.listarFiliais().then(setFiliais).catch((e) => setErro(e.mensagem));
+    api.listarVendedores().then(setVendedores).catch(() => setVendedores([]));
+  }, []);
 
-    if (vendaRecebida) {
-      setNumeroVenda(vendaRecebida.id || vendaRecebida.numeroVenda || '');
-      
-      const nomeCliente = vendaRecebida.cliente || '';
-      const docCliente = vendaRecebida.clienteDoc || '';
-      setBuscaCliente(nomeCliente ? (docCliente && docCliente !== '—' ? `${nomeCliente} - ${docCliente}` : nomeCliente) : '');
-      setCliente({ nome: nomeCliente, doc: docCliente });
-
-      if (vendaRecebida.pdvId) setPdvId(vendaRecebida.pdvId);
-      
-      if (vendaRecebida.vendedorId) {
-        setVendedorId(vendaRecebida.vendedorId);
-      } else if (vendaRecebida.vendedor) {
-        const vend = (VENDEDORES || []).find(v => normalizarComparacao(v.nome) === normalizarComparacao(vendaRecebida.vendedor));
-        if (vend) setVendedorId(vend.id);
-      }
-
-      if (vendaRecebida.status) {
-        setStatus(vendaRecebida.status);
-      }
-
-      if (vendaRecebida.itens && Array.isArray(vendaRecebida.itens)) {
-        const novosItens = {
-          PRODUTO_VIVO: [],
-          SERVICO_VIVO: [],
-          ACESSORIO: [],
-          RECARGA: []
-        };
-
-        vendaRecebida.itens.forEach((it) => {
-          const cat = it.categoria || 'PRODUTO_VIVO';
-          if (novosItens[cat]) {
-            novosItens[cat].push(it);
-          } else {
-            novosItens.PRODUTO_VIVO.push(it);
-          }
-        });
-
-        setItensPorCategoria(novosItens);
-      }
-
-      if (vendaRecebida.pagamentos && Array.isArray(vendaRecebida.pagamentos)) {
-        setPagamentos(vendaRecebida.pagamentos);
-      }
-
-      sessionStorage.removeItem('syscor_venda_edicao');
-    } else if (!location.state?.vendaId) {
-      const historico = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
-      if (historico.length > 0) {
-        const ultimoIdNum = parseInt(historico[historico.length - 1].id, 10);
-        if (!isNaN(ultimoIdNum)) {
-          setNumeroVenda(String(ultimoIdNum + 1).padStart(6, '0'));
-        }
-      } else {
-        setNumeroVenda('000001');
-      }
-    }
+  useEffect(() => {
+    const id = location.state?.vendaId;
+    if (!id) return;
+    api.buscarVenda(id).then((v) => carregarVendaExistente(v)).catch((e) => setErro(e.mensagem));
   }, [location.state]);
 
   const totalAPagarCaixa = useMemo(() => {
@@ -265,59 +224,36 @@ export default function Venda() {
     return s === 'Alta' || s === 'Reativação' || s === 'Migração' || s === 'Troca de Simcard';
   }, [servicoForm.servico]);
 
-  // Clientes
-  const clientesSugeridos = useMemo(() => {
-    if (buscaCliente.trim().length < 2) return [];
-    if (cliente && `${cliente.nome} - ${cliente.doc || cliente.documento || ''}`.toLowerCase() === buscaCliente.trim().toLowerCase()) return [];
-
-    const termo = buscaCliente.trim().toLowerCase();
-    const termoNumerico = termo.replace(/\D/g, '');
-
-    return (clientesDemo || []).filter((c) => {
-      const nome = (c.nome || '').toLowerCase();
-      const docLimpo = (c.doc || c.documento || c.cnpj || c.cpf || '').replace(/\D/g, '');
-      const docFormatado = (c.doc || c.documento || c.cnpj || c.cpf || '').toLowerCase();
-
-      return (
-        nome.includes(termo) ||
-        docFormatado.includes(termo) ||
-        (termoNumerico.length >= 2 && docLimpo.includes(termoNumerico))
-      );
-    });
+  // Sugestões — buscam na API com debounce de 300 ms
+  useEffect(() => {
+    const termo = buscaCliente.trim();
+    if (cliente || termo.length < 2) { setClientesSugeridos([]); return undefined; }
+    let ativo = true;
+    const t = setTimeout(() => {
+      api.buscarClientes(termo).then((r) => ativo && setClientesSugeridos(r)).catch(() => ativo && setClientesSugeridos([]));
+    }, 300);
+    return () => { ativo = false; clearTimeout(t); };
   }, [buscaCliente, cliente]);
 
-  // Sugestões de aparelhos com Serial/IMEI
-  const aparelhosSugeridos = useMemo(() => {
-    if (buscaSerialProduto.trim().length < 2) return [];
-    const termo = buscaSerialProduto.trim().toLowerCase();
-    const imeiBase = JSON.parse(localStorage.getItem('syscor_imei')) || imeiDemo || [];
+  useEffect(() => {
+    const termo = buscaSerialProduto.trim();
+    if (aparelhoSelecionado || termo.length < 2) { setAparelhosSugeridos([]); return undefined; }
+    let ativo = true;
+    const t = setTimeout(() => {
+      api.buscarAparelhos(termo).then((r) => ativo && setAparelhosSugeridos(r)).catch(() => ativo && setAparelhosSugeridos([]));
+    }, 300);
+    return () => { ativo = false; clearTimeout(t); };
+  }, [buscaSerialProduto, aparelhoSelecionado]);
 
-    return imeiBase
-      .filter((item) => {
-        const itemCat = (item.cat || '').toLowerCase();
-        const ehAparelho = itemCat.includes('produto') || itemCat.includes('aparelho') || itemCat.includes('smartphone');
-        const bateTermo = (item.nome || '').toLowerCase().includes(termo) || (item.imei || '').toLowerCase().includes(termo);
-        const disponivel = !item.status || item.status.toUpperCase() !== 'VENDIDO';
-        return ehAparelho && bateTermo && disponivel;
-      })
-      .slice(0, 6);
-  }, [buscaSerialProduto]);
-
-  // Acessórios
-  const acessoriosSugeridos = useMemo(() => {
-    if (buscaAcessorio.trim().length < 2) return [];
-    const termo = buscaAcessorio.trim().toLowerCase();
-    const estoqueBase = JSON.parse(localStorage.getItem('syscor_estoque')) || estoqueDemo || [];
-
-    return estoqueBase
-      .filter((item) => {
-        const itemCat = (item.cat || '').toLowerCase();
-        const ehAcessorio = itemCat.includes('acessorio') || itemCat.includes('acessório');
-        const bateTermo = (item.nome || '').toLowerCase().includes(termo) || (item.sku || '').toLowerCase().includes(termo);
-        return ehAcessorio && bateTermo;
-      })
-      .slice(0, 6);
-  }, [buscaAcessorio]);
+  useEffect(() => {
+    const termo = buscaAcessorio.trim();
+    if (acessorioSelecionado || termo.length < 2) { setAcessoriosSugeridos([]); return undefined; }
+    let ativo = true;
+    const t = setTimeout(() => {
+      api.buscarAcessorios(termo).then((r) => ativo && setAcessoriosSugeridos(r)).catch(() => ativo && setAcessoriosSugeridos([]));
+    }, 300);
+    return () => { ativo = false; clearTimeout(t); };
+  }, [buscaAcessorio, acessorioSelecionado]);
 
   const handleConfirmarSerialServico = () => {
     if (!servicoForm.simcard4g.trim()) {
@@ -327,18 +263,122 @@ export default function Venda() {
     setServicoForm((prev) => ({ ...prev, serialConfirmado: true }));
   };
 
+  // =========================================================================
+  // INTEGRAÇÃO COM A API
+  // =========================================================================
+  const num = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Math.round(Number(v) * 100) / 100);
+  const sim = (v) => v === true || v === 'Sim';
+  const credenciais = () => ({ email: emailLogin.trim(), senha });
+
+  const executar = async (fn) => {
+    setErro('');
+    setCarregando(true);
+    try {
+      return await fn();
+    } catch (e) {
+      setErro(e.mensagem || e.message || 'Falha ao comunicar com o servidor.');
+      return null;
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const aplicarVenda = (v) => {
+    const tela = api.vendaParaTela(v);
+    setVendaId(v.id);
+    setNumeroVenda(tela.numero);
+    setStatus(v.status);
+    setItensPorCategoria(tela.itensPorCategoria);
+    setPagamentos(tela.pagamentos);
+  };
+
+  const carregarVendaExistente = (v) => {
+    aplicarVenda(v);
+    setCliente({ id: v.clienteId, nome: v.clienteNome, doc: '—' });
+    setBuscaCliente(v.clienteNome);
+    setPdvId(String(v.filialId));
+    inicioSalvoRef.current = { clienteId: v.clienteId, filialId: v.filialId };
+  };
+
+  const resetarTela = () => {
+    setVendaId(null);
+    setNumeroVenda('');
+    setStatus('ABERTA');
+    setCliente(null);
+    setBuscaCliente('');
+    setPagamentos([]);
+    setItensPorCategoria({ PRODUTO_VIVO: [], SERVICO_VIVO: [], ACESSORIO: [], RECARGA: [] });
+    setSenha('');
+    setAbaAtiva('INICIO');
+    inicioSalvoRef.current = { clienteId: null, filialId: null };
+  };
+
+  const handleSelecionarVendedor = (id) => {
+    setVendedorId(id);
+    const v = vendedores.find((x) => String(x.id) === String(id));
+    setEmailLogin(v?.email || '');
+  };
+
+  /** Abre o carrinho no backend na primeira ação (ou sincroniza cliente/PDV se mudaram). Devolve o id da venda. */
+  const garantirVenda = async () => {
+    if (!pdvId) throw new Error('Selecione o PDV na aba Início.');
+    if (!cliente?.id) throw new Error('Selecione um cliente cadastrado na aba Início.');
+    if (!emailLogin.trim() || !senha) throw new Error('Informe o e-mail e a senha do vendedor na aba Início.');
+
+    const filialId = Number(pdvId);
+    if (!vendaId) {
+      const v = await api.abrirVenda({
+        clienteId: cliente.id,
+        filialId,
+        estoqueAvancado: false,
+        autenticacaoVendedor: credenciais(),
+      });
+      inicioSalvoRef.current = { clienteId: cliente.id, filialId };
+      aplicarVenda(v);
+      return v.id;
+    }
+
+    const salvo = inicioSalvoRef.current;
+    if (salvo.clienteId !== cliente.id || salvo.filialId !== filialId) {
+      const v = await api.atualizarInicio(vendaId, {
+        clienteId: cliente.id,
+        filialId,
+        estoqueAvancado: false,
+        autenticacaoUsuario: credenciais(),
+      });
+      inicioSalvoRef.current = { clienteId: cliente.id, filialId };
+      aplicarVenda(v);
+    }
+    return vendaId;
+  };
+
+  const enviarItem = async (corpo) => {
+    const id = await garantirVenda();
+    aplicarVenda(await api.adicionarItem(id, corpo));
+  };
+
+  const formServicoVazio = () => ({
+    servico: '', ddd: '', tipoPlano: '', planoAntigo: '', planoNovo: '', numeroLinha: '', sistemaOrigem: '',
+    vencimentoFatura: '', valorMensalidade: 0.00, simcard3g: '', simcard4g: '', clientePossuiSimcard: false,
+    simcardDoado: false, descontoChip: '', valorChip: '', serialConfirmado: false
+  });
+
+  const formProdutoVazio = () => ({
+    tabelaPreco: '', sva: 'Nao', seguro: 'Nao', segmento: '', servico: 'Troca de Aparelho', ddd: '',
+    planoAtivo: '', debitoAutomatico: false, valor: 0, valorAdicional: '', valorAcrescimo: 0.00, desconto: '',
+    cupom: false, vencimentoFatura: '', numeroLinha: '', sistemaOrigem: '', numOrdemNext: '', numSolicitacaoGed: ''
+  });
+
   const handleAdicionarServicoVivo = (e) => {
     e.preventDefault();
     if (!servicoForm.servico || !servicoForm.numeroLinha) {
       alert('Por favor, selecione o Serviço e informe o Número da linha.');
       return;
     }
-
     if (requerPlanoAntigo && !servicoForm.planoAntigo) {
       alert('Para Migração ou Troca de Plano, selecione o Plano Antigo.');
       return;
     }
-
     if (requerSimcard && !servicoForm.clientePossuiSimcard && !servicoForm.simcard4g) {
       alert('Informe o Serial do Simcard ou selecione "Cliente já possui simcard".');
       return;
@@ -349,64 +389,37 @@ export default function Venda() {
       descricaoCompleta = `${servicoForm.servico}: [${servicoForm.planoAntigo}] ➔ [${servicoForm.planoNovo || 'Plano Novo'}]`;
     }
 
-    let chipInfo = '';
-    if (servicoForm.clientePossuiSimcard) {
-      chipInfo = ' · Chip Próprio';
-    } else if (servicoForm.simcard4g) {
-      chipInfo = ` · ICCID: ${servicoForm.simcard4g}`;
-    }
-
-    const novoServico = {
-      id: `serv-${Date.now()}`,
-      categoria: 'SERVICO_VIVO',
-      descricao: descricaoCompleta,
-      imeiOuSerial: `Linha: (${servicoForm.ddd}) ${servicoForm.numeroLinha}${chipInfo}${servicoForm.sistemaOrigem ? ` · Origem: ${servicoForm.sistemaOrigem}` : ''}`,
-      quantidade: 1,
-      valorUnitario: 0.00,
-      valorTotal: 0.00,
-      mensalidadeFatura: servicoForm.valorMensalidade || 0,
-      detalhes: {
-        servico: servicoForm.servico,
-        planoAntigo: servicoForm.planoAntigo,
-        planoNovo: servicoForm.planoNovo,
-        mensalidade: servicoForm.valorMensalidade,
-        linha: `(${servicoForm.ddd}) ${servicoForm.numeroLinha}`,
-        vencimento: servicoForm.vencimentoFatura
-      }
-    };
-
-    setItensPorCategoria((prev) => ({
-      ...prev,
-      SERVICO_VIVO: [...prev.SERVICO_VIVO, novoServico]
-    }));
-
-    setServicoForm({
-      servico: '',
-      ddd: '',
-      tipoPlano: '',
-      planoAntigo: '',
-      planoNovo: '',
-      numeroLinha: '',
-      sistemaOrigem: '',
-      vencimentoFatura: '',
-      valorMensalidade: 0.00,
-      simcard3g: '',
-      simcard4g: '',
-      clientePossuiSimcard: false,
-      simcardDoado: false,
-      descontoChip: '',
-      valorChip: '',
-      serialConfirmado: false
+    executar(async () => {
+      await enviarItem({
+        categoria: 'SERVICO_VIVO',
+        produtoId: null,
+        descricaoProduto: descricaoCompleta,
+        quantidade: 1,
+        valorUnitario: 0,                       // plano é cobrado na fatura da operadora
+        tipoServico: servicoForm.servico,
+        ddd: servicoForm.ddd || null,
+        numeroAcesso: servicoForm.numeroLinha,
+        planoAntigo: servicoForm.planoAntigo || null,
+        plano: servicoForm.planoNovo || null,
+        valorAdicional: num(servicoForm.valorMensalidade),   // mensalidade informada na fatura
+        vencimentoFatura: servicoForm.vencimentoFatura || null,
+        sistemaOrigem: servicoForm.sistemaOrigem || null,
+        simcard3g: servicoForm.simcard3g || null,
+        simcard4g: servicoForm.simcard4g || null,
+        clientePossuiSimcard: !!servicoForm.clientePossuiSimcard,
+        simcardDoado: !!servicoForm.simcardDoado,
+        descontoChip: num(servicoForm.descontoChip),
+        valorChip: num(servicoForm.valorChip),
+        serialConfirmado: !!servicoForm.serialConfirmado
+      });
+      setServicoForm(formServicoVazio());
     });
   };
 
   const handleSelecionarAparelho = (ap) => {
     setAparelhoSelecionado(ap);
     setBuscaSerialProduto(ap.imei);
-    setFormProdutoVivo((prev) => ({
-      ...prev,
-      valor: ap.preco || 0
-    }));
+    setFormProdutoVivo((prev) => ({ ...prev, valor: ap.preco || 0 }));
   };
 
   const handleSalvarProdutoVivo = () => {
@@ -414,53 +427,43 @@ export default function Venda() {
       alert('Por favor, informe ou selecione o Serial/IMEI do aparelho.');
       return;
     }
-
     if (!formProdutoVivo.planoAtivo) {
       alert('Selecione o plano ativo ou contratado do cliente para validar a venda do aparelho.');
       return;
     }
+    const f = formProdutoVivo;
+    const valorFinal = num(f.valor) || 0;
 
-    const valorFinal = Number(formProdutoVivo.valor) || 0;
-
-    const novoItem = {
-      id: `prod-${Date.now()}`,
-      categoria: 'PRODUTO_VIVO',
-      descricao: aparelhoSelecionado.nome,
-      imeiOuSerial: aparelhoSelecionado.imei || buscaSerialProduto,
-      numeroLinha: formProdutoVivo.numeroLinha ? `Linha: ${formProdutoVivo.numeroLinha}` : '',
-      quantidade: 1,
-      valorUnitario: valorFinal,
-      valorTotal: valorFinal,
-      detalhes: { ...formProdutoVivo }
-    };
-
-    setItensPorCategoria((prev) => ({
-      ...prev,
-      PRODUTO_VIVO: [...prev.PRODUTO_VIVO, novoItem]
-    }));
-
-    setModalProdutoAberto(false);
-    setAparelhoSelecionado(null);
-    setBuscaSerialProduto('');
-    setFormProdutoVivo({
-      tabelaPreco: '',
-      sva: 'Nao',
-      seguro: 'Nao',
-      segmento: '',
-      servico: 'Troca de Aparelho',
-      ddd: '',
-      planoAtivo: '',
-      debitoAutomatico: false,
-      valor: 0,
-      valorAdicional: '',
-      valorAcrescimo: 0.00,
-      desconto: '',
-      cupom: false,
-      vencimentoFatura: '',
-      numeroLinha: '',
-      sistemaOrigem: '',
-      numOrdemNext: '',
-      numSolicitacaoGed: ''
+    executar(async () => {
+      await enviarItem({
+        categoria: 'PRODUTO_VIVO',
+        produtoId: aparelhoSelecionado.produtoId,
+        descricaoProduto: aparelhoSelecionado.nome,
+        quantidade: 1,
+        valorUnitario: valorFinal,
+        imeiOuSerial: aparelhoSelecionado.imei,
+        tabelaPreco: f.tabelaPreco || null,
+        sva: sim(f.sva),
+        seguro: sim(f.seguro),
+        segmento: f.segmento || null,
+        tipoServico: f.servico || null,
+        ddd: f.ddd || null,
+        plano: f.planoAtivo,
+        debitoAutomatico: !!f.debitoAutomatico,
+        valorAdicional: num(f.valorAdicional),
+        valorAcrescimo: num(f.valorAcrescimo),
+        desconto: num(f.desconto),
+        cupom: !!f.cupom,
+        vencimentoFatura: f.vencimentoFatura || null,
+        numeroAcesso: f.numeroLinha || null,
+        sistemaOrigem: f.sistemaOrigem || null,
+        numOrdemNext: f.numOrdemNext || null,
+        numSolicitacaoGed: f.numSolicitacaoGed || null
+      });
+      setModalProdutoAberto(false);
+      setAparelhoSelecionado(null);
+      setBuscaSerialProduto('');
+      setFormProdutoVivo(formProdutoVazio());
     });
   };
 
@@ -470,106 +473,55 @@ export default function Venda() {
       alert('Selecione um acessório da lista de busca.');
       return;
     }
-
-    const novoItem = {
-      id: `acess-${Date.now()}`,
-      categoria: 'ACESSORIO',
-      descricao: acessorioSelecionado.nome,
-      imeiOuSerial: acessorioSelecionado.sku || 'S/N',
-      numeroLinha: '',
-      quantidade: qtdAcessorio,
-      valorUnitario: acessorioSelecionado.preco || 0,
-      valorTotal: (acessorioSelecionado.preco || 0) * qtdAcessorio
-    };
-
-    setItensPorCategoria((prev) => ({
-      ...prev,
-      ACESSORIO: [...prev.ACESSORIO, novoItem]
-    }));
-
-    setBuscaAcessorio('');
-    setAcessorioSelecionado(null);
-    setQtdAcessorio(1);
+    executar(async () => {
+      await enviarItem({
+        categoria: 'ACESSORIO',
+        produtoId: acessorioSelecionado.produtoId,
+        descricaoProduto: acessorioSelecionado.nome,
+        quantidade: Number(qtdAcessorio) || 1,
+        valorUnitario: acessorioSelecionado.preco
+      });
+      setBuscaAcessorio('');
+      setAcessorioSelecionado(null);
+      setQtdAcessorio(1);
+    });
   };
 
   const handleRemoverItem = (categoria, itemId) => {
-    setItensPorCategoria((prev) => ({
-      ...prev,
-      [categoria]: prev[categoria].filter((i) => i.id !== itemId)
-    }));
+    if (!vendaId) return;
+    executar(async () => aplicarVenda(await api.removerItem(vendaId, itemId)));
   };
 
   const handleAdicionarPagamento = (e) => {
     e.preventDefault();
     const v = parseFloat(String(pgtoForm.valor).replace(',', '.'));
+    if (!pgtoForm.forma) {
+      alert('Selecione a forma de pagamento.');
+      return;
+    }
     if (!v || v <= 0) {
       alert('Introduza um valor de pagamento válido.');
       return;
     }
-
     if (totalAPagarCaixa > 0 && v > saldoRestante + 0.01) {
       alert(`O valor indicado (${formatadorMoeda.format(v)}) excede o saldo restante (${formatadorMoeda.format(saldoRestante)}).`);
       return;
     }
-
-    const descricaoCondicao = pgtoForm.forma === 'Cartão de Crédito' ? pgtoForm.parcelas : 'À vista';
-    const novoPgto = {
-      id: `pg-${Date.now()}`,
-      forma: `${pgtoForm.forma}${pgtoForm.forma === 'Cartão de Crédito' ? ` (${descricaoCondicao})` : ''}`,
-      detalhes: descricaoCondicao,
-      valor: v
-    };
-
-    setPagamentos((prev) => [...prev, novoPgto]);
-    setPgtoForm((prev) => ({ ...prev, valor: '' }));
+    const credito = pgtoForm.forma === 'Cartão de Crédito';
+    executar(async () => {
+      const id = await garantirVenda();
+      aplicarVenda(await api.adicionarPagamento(id, {
+        forma: api.FORMA_ENUM[pgtoForm.forma],
+        valor: Math.round(v * 100) / 100,
+        parcelas: credito ? parseInt(pgtoForm.parcelas, 10) || 1 : 1
+      }));
+      setPgtoForm((prev) => ({ ...prev, valor: '' }));
+    });
   };
 
   const handleRemoverPagamento = (id) => {
-    setPagamentos((prev) => prev.filter((p) => p.id !== id));
-  };
-
-  const executarBaixaEstoque = (itensVendidos) => {
-    const estoqueSalvo = JSON.parse(localStorage.getItem('syscor_estoque'));
-    const imeiSalvo = JSON.parse(localStorage.getItem('syscor_imei'));
-
-    const estoqueAtual = estoqueSalvo || estoqueDemo.map((item) => ({ ...item }));
-    const imeiAtual = imeiSalvo || imeiDemo.map((item) => ({ ...item }));
-
-    itensVendidos.forEach((itemVenda) => {
-      if (itemVenda.categoria !== 'PRODUTO_VIVO' && itemVenda.categoria !== 'ACESSORIO') {
-        return;
-      }
-
-      const descVenda = normalizarComparacao(itemVenda.descricao);
-
-      const idxEstoque = estoqueAtual.findIndex((e) => {
-        const skuBate = e.sku && e.sku === itemVenda.imeiOuSerial;
-        if (skuBate) return true;
-        const nomeEstoque = normalizarComparacao(e.nome || '');
-        if (!nomeEstoque || !descVenda) return false;
-        return nomeEstoque.includes(descVenda) || descVenda.includes(nomeEstoque);
-      });
-
-      if (idxEstoque !== -1) {
-        const novoSaldo = Math.max(0, (estoqueAtual[idxEstoque].saldo || 0) - itemVenda.quantidade);
-        estoqueAtual[idxEstoque].saldo = novoSaldo;
-        if (novoSaldo === 0) estoqueAtual[idxEstoque].status = 'esgotado';
-        else if (novoSaldo <= (estoqueAtual[idxEstoque].min || 2)) estoqueAtual[idxEstoque].status = 'critico';
-        else estoqueAtual[idxEstoque].status = 'ok';
-      }
-
-      if (itemVenda.imeiOuSerial && itemVenda.imeiOuSerial !== 'S/N') {
-        const idxImei = imeiAtual.findIndex((i) => i.imei === itemVenda.imeiOuSerial);
-        if (idxImei !== -1) {
-          imeiAtual[idxImei].status = 'VENDIDO';
-          imeiAtual[idxImei].vendaId = numeroVenda;
-          imeiAtual[idxImei].dataVenda = new Date().toLocaleDateString('pt-BR');
-        }
-      }
-    });
-
-    localStorage.setItem('syscor_estoque', JSON.stringify(estoqueAtual));
-    localStorage.setItem('syscor_imei', JSON.stringify(imeiAtual));
+    if (!vendaId) return;
+    executar(async () => aplicarVenda(await api.removerPagamento(vendaId, id)));
   };
 
   const handleFinalizarVenda = () => {
@@ -577,65 +529,38 @@ export default function Venda() {
       alert('Adicione pelo menos um item ao carrinho antes de finalizar a venda.');
       return;
     }
-
     if (totalAPagarCaixa > 0 && saldoRestante > 0.01) {
       alert(`Existe um saldo pendente de ${formatadorMoeda.format(saldoRestante)}. Registe o pagamento na aba "Pagamento".`);
       setAbaAtiva('PAGAMENTO');
       return;
     }
+    executar(async () => {
+      const id = await garantirVenda();
+      const v = await api.finalizar(id, credenciais());
+      const numero = String(v.numeroVenda).padStart(6, '0');
+      resetarTela();
+      setMensagemSucesso(`Venda #${numero} finalizada e enviada para aprovação (status ${v.status}).`);
+      setTimeout(() => setMensagemSucesso(''), 6000);
+    });
+  };
 
-    setCarregando(true);
-
-    setTimeout(() => {
-      const todosItens = Object.values(itensPorCategoria).flat();
-      executarBaixaEstoque(todosItens);
-
-      const novaVendaRegistrada = {
-        id: numeroVenda,
-        data: new Date().toLocaleDateString('pt-BR'),
-        hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        pdvId,
-        vendedorId,
-        vendedorNome: (VENDEDORES || []).find((v) => v.id === vendedorId)?.nome || 'Não informado',
-        cliente: cliente ? cliente.nome : (buscaCliente || 'Cliente Balcão'),
-        clienteDoc: cliente ? (cliente.doc || cliente.documento || cliente.cpf || cliente.cnpj || '—') : '—',
-        itens: todosItens,
-        valorTotal: totalAPagarCaixa,
-        pagamentos,
-        status: 'FINALIZADA'
-      };
-
-      const historicoAtual = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
-      
-      const jaExisteIndex = historicoAtual.findIndex(v => v.id === numeroVenda);
-      if (jaExisteIndex !== -1) {
-        historicoAtual[jaExisteIndex] = novaVendaRegistrada;
-        localStorage.setItem('syscor_vendas', JSON.stringify(historicoAtual));
-      } else {
-        localStorage.setItem('syscor_vendas', JSON.stringify([...historicoAtual, novaVendaRegistrada]));
-      }
-
-      const proximoNumero = String(parseInt(numeroVenda, 10) + 1).padStart(6, '0');
-
-      setNumeroVenda(proximoNumero);
-      setCliente(null);
-      setBuscaCliente('');
-      setEmailLogin('');
-      setSenha('');
-      setPagamentos([]);
-      setItensPorCategoria({
-        PRODUTO_VIVO: [],
-        SERVICO_VIVO: [],
-        ACESSORIO: [],
-        RECARGA: []
-      });
+  /** Aprovar / Concluir / Cancelar (cancelar devolve os IMEIs ao estoque). */
+  const handleMudarStatus = (novoStatus) => {
+    if (!vendaId) return;
+    if (!emailLogin.trim() || !senha) {
+      setErro('Informe o e-mail e a senha do vendedor na aba Início para alterar o status.');
       setAbaAtiva('INICIO');
-      setStatus('ABERTA');
-      setCarregando(false);
-
-      setMensagemSucesso(`Venda #${novaVendaRegistrada.id} finalizada com sucesso!`);
+      return;
+    }
+    if (novoStatus === 'CANCELADA' && !window.confirm('Cancelar esta venda? Os IMEIs/seriais voltam ao estoque.')) return;
+    executar(async () => {
+      const v = await api.mudarStatus(vendaId, novoStatus, credenciais());
+      const numero = String(v.numeroVenda).padStart(6, '0');
+      if (novoStatus === 'CANCELADA') resetarTela();
+      else aplicarVenda(v);
+      setMensagemSucesso(`Venda #${numero}: status alterado para ${v.status}.`);
       setTimeout(() => setMensagemSucesso(''), 5000);
-    }, 600);
+    });
   };
 
   return (
@@ -666,12 +591,39 @@ export default function Venda() {
         </div>
       )}
 
+      {erro && (
+        <div role="alert" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+          background: 'rgba(239, 68, 68, 0.12)', border: '1px solid var(--bad, #ef4444)',
+          color: 'var(--bad, #ef4444)', padding: '12px 18px', borderRadius: 8, fontSize: 13.5, fontWeight: 600
+        }}>
+          <span>{erro}</span>
+          <button type="button" onClick={() => setErro('')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {vendaId && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          {status === 'PENDENTE' && (
+            <button type="button" className="btn solid" disabled={carregando} onClick={() => handleMudarStatus('APROVADA')}>Aprovar</button>
+          )}
+          {status === 'APROVADA' && (
+            <button type="button" className="btn solid" disabled={carregando} onClick={() => handleMudarStatus('CONCLUIDA')}>Concluir</button>
+          )}
+          {status !== 'CANCELADA' && (
+            <button type="button" className="btn ghost" disabled={carregando} onClick={() => handleMudarStatus('CANCELADA')}>Cancelar venda</button>
+          )}
+        </div>
+      )}
+
       {/* Cabeçalho */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Pencil size={20} color="var(--accent, #c026d3)" />
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, textTransform: 'uppercase', color: 'var(--text)' }}>
-            Lançar Venda <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-faint)' }}>#{numeroVenda || '000000'}</span>
+            Lançar Venda <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-faint)' }}>#{numeroVenda || 'NOVA'}</span>
           </h1>
         </div>
         <span className="badge neutral" style={{
@@ -741,7 +693,7 @@ export default function Venda() {
                   style={{ ...inputStyleGlobal, width: '100%', maxWidth: 760 }}
                 >
                   <option value="">Escolha ...</option>
-                  {(PDVS || []).map((p) => (
+                  {filiais.map((p) => (
                     <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>
                   ))}
                 </select>
@@ -751,11 +703,11 @@ export default function Venda() {
                 <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Vendedor:</label>
                 <select 
                   value={vendedorId} 
-                  onChange={(e) => setVendedorId(e.target.value)} 
+                  onChange={(e) => handleSelecionarVendedor(e.target.value)} 
                   style={{ ...inputStyleGlobal, width: '100%', maxWidth: 760 }}
                 >
                   <option value="">Escolha...</option>
-                  {(VENDEDORES || []).map((v) => (
+                  {vendedores.map((v) => (
                     <option key={v.id} value={v.id}>{v.nome}</option>
                   ))}
                 </select>
@@ -1946,7 +1898,7 @@ export default function Venda() {
           <button
             type="button"
             onClick={handleFinalizarVenda}
-            disabled={totalItensCarrinho === 0 || carregando}
+            disabled={totalItensCarrinho === 0 || carregando || status !== 'ABERTA'}
             className="btn solid"
             style={{ 
               padding: '12px 26px', 

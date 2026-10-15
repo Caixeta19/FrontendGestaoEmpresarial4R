@@ -1,3 +1,4 @@
+import { API_BASE } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
@@ -38,7 +39,7 @@ export default function Dashboard() {
   const [categoria, setCategoria] = useState('TODAS');
 
   useEffect(() => {
-    fetch('http://localhost:8080/api/v1/dashboard/executivo')
+    fetch(`${API_BASE}/dashboard/executivo`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data) setDados(data); })
       .catch(() => console.log('Carregando base demonstrativa executiva.'));

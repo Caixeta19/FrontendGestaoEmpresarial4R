@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ToastContext.jsx';
+import { login } from '../services/vendasApi';
 
 export default function Login({ onLogin }) {
   const [filial, setFilial] = useState('Valparaíso de Goiás — Matriz');
@@ -10,13 +11,25 @@ export default function Login({ onLogin }) {
   const navigate = useNavigate();
   const showToast = useToast();
 
-  function entrar() {
+  async function entrar() {
     if (!user.trim() || !pass.trim()) {
       showToast('Preencha usuário e senha para continuar.', true);
       return;
     }
-    onLogin({ filial, user });
-    navigate('/');
+    try {
+      const u = await login(user.trim(), pass);
+      onLogin({
+        id: u.id,
+        filial,
+        user: u.email,
+        email: u.email,
+        nome: u.nome,
+        role: `${u.cargo || 'Vendedor'} · ${filial}`
+      });
+      navigate('/');
+    } catch (e: any) {
+      showToast(e?.status === 401 ? 'E-mail ou senha inválidos.' : (e?.mensagem || 'Falha ao entrar.'), true);
+    }
   }
 
   function onKeyDown(e) {
@@ -73,7 +86,7 @@ export default function Login({ onLogin }) {
           <button type="button" className="btn-primary" onClick={entrar}>
             Entrar
           </button>
-          <div className="login-foot">Ambiente de demonstração — qualquer usuário e senha entram no sistema.</div>
+          <div className="login-foot">Acesso restrito a usuários cadastrados.</div>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, 
@@ -10,7 +10,7 @@ import {
   XCircle,
   AlertTriangle
 } from 'lucide-react';
-import { VENDEDORES, PDVS } from '../data/demoData';
+import { listarFiliais, listarVendedores, listarVendas } from '../services/vendasApi';
 
 export default function BuscarVendas() {
   const navigate = useNavigate();
@@ -30,6 +30,14 @@ export default function BuscarVendas() {
 
   const [resultados, setResultados] = useState([]);
   const [buscaRealizada, setBuscaRealizada] = useState(false);
+  const [filiais, setFiliais] = useState([]);
+  const [vendedores, setVendedores] = useState([]);
+  const [erro, setErro] = useState('');
+
+  useEffect(() => {
+    listarFiliais().then(setFiliais).catch(() => setFiliais([]));
+    listarVendedores().then(setVendedores).catch(() => setVendedores([]));
+  }, []);
 
   const handleFiltroChange = (campo, valor) => {
     setFiltros(prev => ({ ...prev, [campo]: valor }));
@@ -52,53 +60,33 @@ export default function BuscarVendas() {
     setBuscaRealizada(false);
   };
 
-  const handleBuscar = (e) => {
+  const handleBuscar = async (e) => {
     e.preventDefault();
-
-    const vendasSalvas = JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
     const numeroLimpo = filtros.numeroVenda.trim().replace(/\D/g, '');
-    const clienteBusca = filtros.cliente.trim().toLowerCase();
-
-    // Filtra dados locais
-    const filtrados = vendasSalvas.filter(v => {
-      const vNum = String(v.id || v.numeroVenda || '').replace(/\D/g, '');
-      const vCli = String(v.cliente || '').toLowerCase();
-
-      if (numeroLimpo && !vNum.includes(numeroLimpo)) return false;
-      if (clienteBusca && !vCli.includes(clienteBusca)) return false;
-      if (filtros.vendedor !== 'Todos' && v.vendedor !== filtros.vendedor) return false;
-      return true;
-    });
-
-    if (filtrados.length > 0) {
-      setResultados(filtrados);
-    } else {
-      // Mock de demonstração caso a base esteja vazia
-      setResultados([
-        {
-          id: filtros.numeroVenda || '000499',
-          data: '22/09/2026 16:35',
-          filial: filtros.pdv === 'Todos' ? '0142 - LOJA SHOPPING CENTRO' : filtros.pdv,
-          vendedor: filtros.vendedor === 'Todos' ? 'MARINA FERREIRA' : filtros.vendedor,
-          cliente: filtros.cliente || 'JOÃO PEDRO MARTINS',
-          nf: '—'
-        }
-      ]);
+    try {
+      setErro('');
+      const lista = await listarVendas({
+        filialId: filtros.pdv !== 'Todos' ? filtros.pdv : undefined,
+        vendedorId: filtros.vendedor !== 'Todos' ? filtros.vendedor : undefined,
+        numeroVenda: numeroLimpo ? Number(numeroLimpo) : undefined,
+        dataInicio: filtros.periodoInicio || undefined,
+        dataFim: filtros.periodoFim || undefined,
+        cliente: filtros.cliente.trim() || undefined,
+        serialProdutoVivo: filtros.serialProdutoVivo.trim() || undefined,
+        serialSimcard: filtros.serialSimcard.trim() || undefined,
+        modeloAcessorio: (filtros.modeloAcessorio || filtros.serialProduto).trim() || undefined
+      });
+      setResultados(lista);
+    } catch (err) {
+      setErro(err.mensagem || 'Falha ao buscar as vendas.');
+      setResultados([]);
     }
-
     setBuscaRealizada(true);
   };
 
   // Redireciona diretamente para a tela de venda com o registro carregado
   const handleAcessarVenda = (venda) => {
-    navigate('/venda', {
-      state: {
-        vendaId: venda.id || venda.numeroVenda,
-        clienteNome: venda.cliente,
-        vendedorNome: venda.vendedor,
-        vendaCarregada: venda
-      }
-    });
+    navigate('/venda/lancar', { state: { vendaId: venda.vendaId, modoEdicao: true } });
   };
 
   return (
@@ -185,8 +173,8 @@ export default function BuscarVendas() {
               style={inputStyle}
             >
               <option value="Todos">Todos</option>
-              {(PDVS || []).map(p => (
-                <option key={p.id} value={p.codigo}>{p.codigo} — {p.nome}</option>
+              {filiais.map(p => (
+                <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>
               ))}
             </select>
           </div>
@@ -200,8 +188,8 @@ export default function BuscarVendas() {
               style={inputStyle}
             >
               <option value="Todos">Todos</option>
-              {(VENDEDORES || []).map(v => (
-                <option key={v.id} value={v.nome}>{v.nome}</option>
+              {vendedores.map(v => (
+                <option key={v.id} value={v.id}>{v.nome}</option>
               ))}
             </select>
           </div>
@@ -468,7 +456,7 @@ export default function BuscarVendas() {
                         {/* BOTÃO CANCELAR */}
                         <button
                           type="button"
-                          onClick={() => alert(`Solicitação de cancelamento da venda ${venda.id}`)}
+                          onClick={() => handleAcessarVenda(venda)}
                           title="Cancelar Venda"
                           style={{ background: 'transparent', border: 'none', color: 'var(--bad, #ef4444)', cursor: 'pointer', padding: 4 }}
                         >
