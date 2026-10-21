@@ -17,7 +17,9 @@ export default function Login({ onLogin }) {
       return;
     }
     try {
+      // O serviço de login agora retorna os dados do usuário + a flag primeiroAcesso
       const u = await login(user.trim(), pass);
+      
       onLogin({
         id: u.id,
         filial,
@@ -26,8 +28,16 @@ export default function Login({ onLogin }) {
         nome: u.nome,
         role: `${u.cargo || 'Vendedor'} · ${filial}`
       });
-      navigate('/');
-    } catch (e: any) {
+
+      // Se for o primeiro acesso, redireciona para a tela de troca obrigatória de senha
+      if (u.primeiroAcesso) {
+        showToast('Primeiro acesso detectado. Por favor, altere sua senha.', false);
+        navigate('/primeiro-acesso'); // Ajuste para a rota correspondente no seu React Router
+      } else {
+        navigate('/');
+      }
+
+    } catch (e) {
       showToast(e?.status === 401 ? 'E-mail ou senha inválidos.' : (e?.mensagem || 'Falha ao entrar.'), true);
     }
   }
