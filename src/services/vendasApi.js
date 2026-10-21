@@ -33,6 +33,29 @@ export async function buscarAparelhos(busca) {
     .map((s) => ({ produtoId: s.produtoId, nome: s.descricao, imei: s.serialImei, preco: Number(s.precoBase), cat: 'Produto Vivo' }));
 }
 
+// Adicione isso no seu src/services/vendasApi.js
+export async function alterarSenha(senhaAtual, novaSenha) {
+  // Pega o token salvo na sessão atual
+  const session = JSON.parse(sessionStorage.getItem('syscor_session') || '{}');
+  const token = session.token;
+
+  const response = await fetch('http://localhost:8080/auth/alterar-senha', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ senhaAtual, novaSenha })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw { mensagem: errorData.message || 'Erro ao alterar a senha. Verifique a senha atual.' };
+  }
+
+  return true;
+}
+
 export async function buscarAcessorios(busca) {
   const lista = await request('/produtos', { params: { busca, categoria: 'ACESSORIO' } });
   return (lista ?? [])

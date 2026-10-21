@@ -7,12 +7,13 @@ import Sidebar from './components/Sidebar';
 
 // Páginas existentes
 import Login from './pages/Login';
+import PrimeiroAcesso from './pages/PrimeiroAcesso'; // <--- Importação adicionada
 import Dashboard from './pages/Dashboard';          // Geral -> Painel Inicial
 import DashboardVendas from './pages/DashboardVendas';
 import ModuloVendas from './pages/ModuloVendas';     // Ecrã com os cartões e botões de venda
-import Venda from './pages/Venda';                   // Formulário de lançamento de venda
+import Venda from './pages/Venda';                  // Formulário de lançamento de venda
 import BuscarVendas from './pages/BuscarVendas';     // Pesquisa de vendas
-import VendasDia from './pages/VendasDia';           // Listagem de vendas do dia
+import VendasDia from './pages/VendasDia';          // Listagem de vendas do dia
 import Clientes from './pages/Clientes';
 import EntradaEstoque from './pages/EntradaEstoque';
 import Estoque from './pages/Estoque';
@@ -310,7 +311,6 @@ function LayoutPrivado({ session, setSession, temaEscuro, toggleTema }) {
 }
 
 export default function App() {
-  // Sessão real: vem do login (POST /auth/login) e fica só na aba do navegador.
   const [session, setSessionState] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem('syscor_session') || 'null'); } catch { return null; }
   });
@@ -333,7 +333,6 @@ export default function App() {
     });
   };
 
-  // Aplicação do tema nas classes e no seletor HTML raiz
   useEffect(() => {
     const root = document.documentElement;
     if (temaEscuro) {
@@ -357,6 +356,9 @@ export default function App() {
           }
         />
 
+        {/* Rota pública para a troca de senha do primeiro acesso */}
+        <Route path="/primeiro-acesso" element={<PrimeiroAcesso />} />
+
         <Route element={
           <LayoutPrivado 
             session={session} 
@@ -365,24 +367,16 @@ export default function App() {
             toggleTema={toggleTema} 
           />
         }>
-          {/* ========================================================= */}
-          {/* 1. GERAL -> PAINEL INICIAL                                */}
-          {/* ========================================================= */}
           <Route path="/" element={<Dashboard />} />
           <Route path="/geral" element={<Dashboard />} />
           <Route path="/geral/painel-inicial" element={<Dashboard />} />
 
-          {/* Dashboards analíticos */}
           <Route path="/dashboard" element={<DashboardVendas />} />
           <Route path="/dashboard/vendas" element={<DashboardVendas />} />
 
-          {/* ========================================================= */}
-          {/* 2. MÓDULO DE VENDA E SUAS ROTAS                           */}
-          {/* ========================================================= */}
           <Route path="/venda" element={<ModuloVendas />} />
           <Route path="/venda/documental" element={<ModuloVendas />} />
 
-          {/* Ações individuais dos 3 botões */}
           <Route path="/venda/lancar" element={<Venda />} />
           <Route path="/venda/documental/lancar" element={<Venda />} />
 
@@ -392,27 +386,19 @@ export default function App() {
           <Route path="/venda/hoje" element={<VendasDia />} />
           <Route path="/venda/documental/hoje" element={<VendasDia />} />
 
-          {/* ========================================================= */}
-          {/* 3. DEMAIS MÓDULOS OPERACIONAIS                            */}
-          {/* ========================================================= */}
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/documental" element={<Documental />} />
 
-          {/* Convy & WhatsApp */}
           <Route path="/convy" element={<Mailing />} />
           <Route path="/mailing" element={<Navigate to="/convy" replace />} />
           <Route path="/whatsapp-chat" element={<WhatsAppChatCRM session={session} />} />
 
-          {/* Estoque */}
           <Route path="/estoque" element={<Estoque />} />
           <Route path="/estoque/inventario" element={<EstoqueInventario />} />
           <Route path="/entrada" element={<EntradaEstoque />} />
 
-          {/* ========================================================= */}
-          {/* 4. MÓDULO FINANCEIRO (CAIXA, CONTAS E COMISSÕES)          */}
-          {/* ========================================================= */}
           <Route path="/financeiro" element={<Financeiro />} />
-          <Route path="/financeiro/movimento" element={<Movimento />} /> {/* <--- Rota Adicionada */}
+          <Route path="/financeiro/movimento" element={<Movimento />} />
           <Route path="/financeiro/caixa" element={<CaixaFinanceiro />} />
           <Route path="/financeiro/caixas" element={<CaixaFinanceiro />} />
           <Route path="/financeiro/caixas-abertos" element={<CaixaFinanceiro />} />
@@ -422,7 +408,6 @@ export default function App() {
           <Route path="/financeiro/suprimentos" element={<CaixaFinanceiro />} />
           <Route path="/financeiro/remuneracao" element={<RemuneracaoVariavel />} />
 
-          {/* Relatórios */}
           <Route path="/relatorios" element={<Relatorios />} />
           <Route path="/relatorios/vendas" element={<Relatorios />} />
           <Route path="/relatorios/documental" element={<Documental />} />
@@ -434,7 +419,6 @@ export default function App() {
         </Route>
       </Routes>
 
-      {/* DEFINIÇÃO DAS VARIÁVEIS CSS DE TEMA UNIFICADAS */}
       <style>{`
         :root[data-theme="dark"], :root {
           --bg: #0d0a14;
