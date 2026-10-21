@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ToastContext.jsx';
-import { alterarSenha } from '../services/vendasApi'; // Importação nomeada correta
+import { alterarSenha } from '../services/vendasApi';
 
 export default function PrimeiroAcesso() {
   const [senhaAtual, setSenhaAtual] = useState('');

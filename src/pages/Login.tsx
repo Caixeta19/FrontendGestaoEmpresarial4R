@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ToastContext.jsx';
 import { login } from '../services/vendasApi';
 
-export default function Login({ onLogin }) {
+export default function Login({ setSession }) {
   const [filial, setFilial] = useState('Valparaíso de Goiás — Matriz');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
@@ -17,26 +17,29 @@ export default function Login({ onLogin }) {
       return;
     }
     try {
-      // O serviço de login agora retorna os dados do usuário + a flag primeiroAcesso
+      // A função de login do seu vendasApi deve retornar o objeto com token, primeiroAcesso, etc.
       const u = await login(user.trim(), pass);
       
-      onLogin({
+      const dadosSessao = {
+        token: u.token,
         id: u.id,
         filial,
-        user: u.email,
+        user: u.email || user,
         email: u.email,
-        nome: u.nome,
+        nome: u.nome || 'Usuário',
         role: `${u.cargo || 'Vendedor'} · ${filial}`
-      });
+      };
 
-      // Se for o primeiro acesso, redireciona para a tela de troca obrigatória de senha
+      // Salva a sessão temporariamente
+      setSession(dadosSessao);
+
+      // Se for o primeiro acesso, redireciona obrigatoriamente para a tela de troca de senha
       if (u.primeiroAcesso) {
-        showToast('Primeiro acesso detectado. Por favor, altere sua senha.', false);
-        navigate('/primeiro-acesso'); // Ajuste para a rota correspondente no seu React Router
+        showToast('Primeiro acesso detectado. Altere sua senha para continuar.', false);
+        navigate('/primeiro-acesso');
       } else {
         navigate('/');
       }
-
     } catch (e) {
       showToast(e?.status === 401 ? 'E-mail ou senha inválidos.' : (e?.mensagem || 'Falha ao entrar.'), true);
     }

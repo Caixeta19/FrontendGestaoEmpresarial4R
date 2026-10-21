@@ -1,5 +1,5 @@
 // Cliente HTTP único do frontend. Todas as telas falam com o backend por aqui.
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/';
 
 export class ApiError extends Error {
   constructor(status, mensagem, campos) {
