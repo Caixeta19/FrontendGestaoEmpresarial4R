@@ -1,5 +1,5 @@
 // Cliente HTTP único do frontend. Todas as telas falam com o backend por aqui.
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
 export class ApiError extends Error {
   constructor(status, mensagem, campos) {
@@ -19,16 +19,24 @@ function lerJson(texto) {
  * Lança ApiError com a mensagem do backend (campo "mensagem" do GlobalExceptionHandler).
  */
 export async function request(path, { method = 'GET', body, params } = {}) {
-  const url = new URL(API_BASE + path, window.location.origin);
+  // Corrige a URL para garantir que use sempre a API_BASE do back-end
+  const url = new URL(path.startsWith('http') ? path : API_BASE + path);
+  
   Object.entries(params || {}).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v);
   });
 
+  // Recupera o token JWT armazenado para autenticação nas rotas protegidas
+  const token = localStorage.getItem('syscor_token') || JSON.parse(sessionStorage.getItem('syscor_session') || '{}').token;
+
   let resp;
   try {
-    resp = await fetch(url, {
+    resp = await fetch(url.toString(), {
       method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {

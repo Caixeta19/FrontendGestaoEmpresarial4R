@@ -12,11 +12,19 @@ export async function login(usuario, senha) {  // usuario = e-mail ou login
   const res = await fetch(`${API}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usuario, senha }),
+    // Ajustado para enviar 'login' conforme o LoginRequest do AuthController
+    body: JSON.stringify({ login: usuario, senha }),
   });
+  
   if (!res.ok) throw new Error('Usuário ou senha inválidos');
-  const { token } = await res.json();
-  localStorage.setItem(CHAVE, token);
+  
+  // Captura o token E a flag primeiroAcesso retornadas pelo back-end
+  const data = await res.json();
+  
+  localStorage.setItem(CHAVE, data.token);
+  
+  // Retorna os dados completos para que o Login.jsx consiga ler o 'primeiroAcesso'
+  return data;
 }
  
 // Use no lugar de fetch(...) nas telas (Dashboard.jsx, Documental.jsx, ...)
@@ -36,4 +44,3 @@ export async function apiFetch(path, options = {}) {
   }
   return res;
 }
- 
