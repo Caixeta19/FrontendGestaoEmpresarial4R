@@ -16,6 +16,11 @@ const dataHora = (iso) =>
 
 // ---------------------------------------------------------------- acesso / cadastros
 export const login = (email, senha) => request('/auth/login', { method: 'POST', body: { email, senha } });
+
+// Passa pelo request(): usa API_BASE (com /api), o token e o tratamento de erro padrão.
+export const alterarSenha = (senhaAtual, novaSenha) =>
+  request('/auth/alterar-senha', { method: 'POST', body: { senhaAtual, novaSenha } });
+
 export const listarFiliais = () => request('/filiais');
 export const listarVendedores = () => request('/usuarios');
 
@@ -31,29 +36,6 @@ export async function buscarAparelhos(busca) {
   return (lista ?? [])
     .filter((s) => s.categoria === 'PRODUTO_VIVO')
     .map((s) => ({ produtoId: s.produtoId, nome: s.descricao, imei: s.serialImei, preco: Number(s.precoBase), cat: 'Produto Vivo' }));
-}
-
-// Adicione isso no seu src/services/vendasApi.js
-export async function alterarSenha(senhaAtual, novaSenha) {
-  // Pega o token salvo na sessão atual
-  const session = JSON.parse(sessionStorage.getItem('syscor_session') || '{}');
-  const token = session.token;
-
-  const response = await fetch('http://localhost:8080/auth/alterar-senha', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ senhaAtual, novaSenha })
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw { mensagem: errorData.message || 'Erro ao alterar a senha. Verifique a senha atual.' };
-  }
-
-  return true;
 }
 
 export async function buscarAcessorios(busca) {

@@ -688,14 +688,20 @@ export default function Venda() {
               <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                 <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>PDV:</label>
                 <select 
-                  value={pdvId} 
-                  onChange={(e) => setPdvId(e.target.value)} 
-                  style={{ ...inputStyleGlobal, width: '100%', maxWidth: 760 }}
-                >
-                  <option value="">Escolha ...</option>
-                  {filiais.map((p) => (
-                    <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>
-                  ))}
+               value={pdvId} 
+               onChange={(e) => setPdvId(e.target.value)} 
+               style={{ width: '100%', maxWidth: 760 }}
+>
+             <option value="">Escolha ...</option>
+              {filiais.map((p) => {
+             const textoBruto = p.nome || p.descricao || p.razaoSocial || '';
+             const textoLimpo = textoBruto.replace(/abadas/gi, '').trim();
+              return (
+               <option key={p.id} value={p.id}>
+                 {textoLimpo}
+              </option>
+                );
+                })}
                 </select>
               </div>
 
