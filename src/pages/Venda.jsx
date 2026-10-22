@@ -691,7 +691,7 @@ export default function Venda() {
                value={pdvId} 
                onChange={(e) => setPdvId(e.target.value)} 
                style={{ width: '100%', maxWidth: 760 }}
->
+                 >
              <option value="">Escolha ...</option>
               {filiais.map((p) => {
              const textoBruto = p.nome || p.descricao || p.razaoSocial || '';
