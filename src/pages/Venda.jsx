@@ -54,12 +54,179 @@ const LISTA_PLANOS_DEMO = [
   { nome: 'Outro / Legado', valorMensal: 0.00 }
 ];
 
-const TABELAS_PRECO = ['Mais Vivo', 'Pré-Pago', 'Varejo / Balcão', 'Fidelizado'];
+// Valor do combo de plano para "Sem plano / Pré-pago" (o backend resolve o grupo PRE)
+const SEM_PLANO = '__SEM_PLANO__';
+const ROTULO_SEM_PLANO = 'Sem plano / Pré-pago';
+const rotuloPlano = (v) => (v === SEM_PLANO ? ROTULO_SEM_PLANO : v || '');
+/** Plano para o backend: sem plano vai vazio na consulta (grupo PRE) e com o rótulo na venda. */
+const planoParaConsulta = (v) => (v && v !== SEM_PLANO ? v : undefined);
+const planoParaVenda = (v) => (v === SEM_PLANO ? ROTULO_SEM_PLANO : v || null);
 
 const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL'
 });
+
+const COR_SEM_PRECO = 'var(--warn, #f59e0b)';
+
+/**
+ * Preço de uma unidade do estoque na tabela vigente, com debounce de 300 ms.
+ * status: ocioso | carregando | ok | semPreco | erro.
+ */
+function usePrecoItem({ estoqueId, plano, tabela, habilitado }) {
+  const [estado, setEstado] = useState({ status: 'ocioso' });
+
+  useEffect(() => {
+    if (!habilitado || !estoqueId) {
+      setEstado({ status: 'ocioso' });
+      return undefined;
+    }
+    let ativo = true;
+    setEstado({ status: 'carregando' });
+    const t = setTimeout(() => {
+      api.consultarPreco({ estoqueId, plano, tabela })
+        .then((r) => {
+          if (!ativo) return;
+          setEstado(r.semPreco ? { status: 'semPreco', mensagem: r.mensagem } : { status: 'ok', preco: r });
+        })
+        .catch((e) => ativo && setEstado({ status: 'erro', mensagem: e.mensagem || 'Falha ao consultar o preço.' }));
+    }, 300);
+    return () => { ativo = false; clearTimeout(t); };
+  }, [estoqueId, plano, tabela, habilitado]);
+
+  return estado;
+}
+
+/** Combo com busca digitável dos planos da tabela vigente (~400): nome do plano e, em cinza, o grupo. */
+function ComboPlano({ value, onChange, placeholder, permitirSemPlano = true, destaque }) {
+  const [aberto, setAberto] = useState(false);
+  const [texto, setTexto] = useState('');
+  const [planos, setPlanos] = useState([]);
+  const [estado, setEstado] = useState('ocioso'); // ocioso | carregando | ok | erro
+  const [erroMsg, setErroMsg] = useState('');
+
+  useEffect(() => {
+    if (!aberto) return undefined;
+    let ativo = true;
+    setEstado('carregando');
+    const t = setTimeout(() => {
+      api.listarPlanos(texto.trim())
+        .then((r) => { if (ativo) { setPlanos(r); setEstado('ok'); } })
+        .catch((e) => { if (ativo) { setErroMsg(e.mensagem || 'Falha ao carregar os planos.'); setEstado('erro'); } });
+    }, 300);
+    return () => { ativo = false; clearTimeout(t); };
+  }, [texto, aberto]);
+
+  const escolher = (valor, plano) => {
+    onChange(valor, plano);
+    setAberto(false);
+    setTexto('');
+  };
+
+  const opcao = { padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--line-soft)', fontSize: 13 };
+  const cinza = { color: 'var(--text-faint)', fontSize: 12, marginLeft: 8 };
+  const aviso = { padding: '8px 12px', fontSize: 12.5, color: 'var(--text-faint)' };
+
+  return (
+    <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+      <input
+        type="text"
+        value={aberto ? texto : rotuloPlano(value)}
+        placeholder={aberto ? 'Digite para buscar o plano...' : placeholder}
+        onFocus={() => { setAberto(true); setTexto(''); }}
+        onBlur={() => setAberto(false)}
+        onChange={(e) => setTexto(e.target.value)}
+        style={{ ...inputStyleGlobal, width: '100%', ...(destaque ? { borderColor: destaque } : {}) }}
+      />
+      {aberto && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0, zIndex: 9999,
+          background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 6,
+          maxHeight: 260, overflowY: 'auto', boxShadow: '0 8px 16px rgba(0,0,0,0.15)'
+        }}>
+          {permitirSemPlano && (
+            <div style={opcao} onMouseDown={() => escolher(SEM_PLANO, null)}>
+              <span style={{ color: 'var(--text)' }}>{ROTULO_SEM_PLANO}</span>
+              <span style={cinza}>{api.rotuloGrupo('PRE')}</span>
+            </div>
+          )}
+          {estado === 'carregando' && <div style={aviso}>Carregando planos...</div>}
+          {estado === 'erro' && <div style={{ ...aviso, color: 'var(--bad, #ef4444)' }}>{erroMsg}</div>}
+          {estado === 'ok' && planos.length === 0 && (
+            <div style={aviso}>{texto.trim() ? 'Nenhum plano encontrado.' : 'Nenhum plano na tabela vigente.'}</div>
+          )}
+          {estado === 'ok' && planos.map((p) => (
+            <div key={`${p.nomePlano}|${p.sistema || ''}`} style={opcao} onMouseDown={() => escolher(p.nomePlano, p)}>
+              <span style={{ color: 'var(--text)' }}>{p.nomePlano}</span>
+              <span style={cinza}>{api.rotuloGrupo(p.grupoPlano)}{p.sistema ? ` · ${p.sistema}` : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Área de preço da tabela vigente: cartão/débito/dinheiro, PIX, parcelas 13x–21x e vigência. */
+function PainelPreco({ estado, vazio }) {
+  const linha = { display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 };
+  const rotulo = { fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 };
+  const selo = (cor) => ({ background: cor, color: '#fff', fontWeight: 700, padding: '6px 14px', borderRadius: 6, fontSize: 13.5 });
+
+  if (estado.status === 'ok') {
+    const p = estado.preco;
+    const parcelasLongas = p.parcelas.filter((x) => x.n >= 13);
+    return (
+      <>
+        <div style={linha}>
+          <label style={rotulo}>Valor (cartão até 12x, débito, dinheiro):</label>
+          <div><span className="mono" style={selo('var(--good, #22c55e)')}>{api.formatarMoeda(p.preco)}</span></div>
+        </div>
+        <div style={linha}>
+          <label style={rotulo}>Valor no PIX / Vivo Pay:</label>
+          <div>
+            {p.precoPix != null
+              ? <span className="mono" style={selo('var(--accent, #a855f7)')}>{api.formatarMoeda(p.precoPix)}</span>
+              : <span style={{ color: 'var(--text-faint)', fontSize: 13 }}>Sem preço PIX nesta tabela</span>}
+          </div>
+        </div>
+        {parcelasLongas.length > 0 && (
+          <div style={linha}>
+            <div />
+            <details style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
+              <summary style={{ cursor: 'pointer' }}>Parcelas de 13x a 21x (valor total)</summary>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '4px 16px', marginTop: 8 }}>
+                {parcelasLongas.map((x) => (
+                  <span key={x.n} className="mono">
+                    {x.n}x: {api.formatarMoeda(x.valor)} <span style={{ color: 'var(--text-faint)' }}>({api.formatarMoeda(x.valor / x.n)}/mês)</span>
+                  </span>
+                ))}
+              </div>
+            </details>
+          </div>
+        )}
+        <div style={linha}>
+          <div />
+          <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Tabela vigente desde {api.formatarData(p.vigencia)}</span>
+        </div>
+      </>
+    );
+  }
+
+  const mensagens = {
+    ocioso: { cor: 'var(--text-faint)', texto: vazio },
+    carregando: { cor: 'var(--text-faint)', texto: 'Consultando preço na tabela vigente...' },
+    semPreco: { cor: COR_SEM_PRECO, texto: estado.mensagem },
+    erro: { cor: 'var(--bad, #ef4444)', texto: estado.mensagem },
+  };
+  const m = mensagens[estado.status] || mensagens.ocioso;
+  return (
+    <div style={linha}>
+      <label style={rotulo}>Valor:</label>
+      <span style={{ color: m.cor, fontSize: 13, fontWeight: estado.status === 'semPreco' ? 600 : 400 }}>{m.texto}</span>
+    </div>
+  );
+}
 
 const normalizarComparacao = (txt = '') =>
   txt
@@ -88,6 +255,7 @@ export default function Venda() {
 
   // Integração com a API
   const [vendaId, setVendaId] = useState(null);          // id da venda no backend (null = carrinho ainda não aberto)
+  const [valorTotalVenda, setValorTotalVenda] = useState(null); // valorTotal devolvido pelo backend
   const [filiais, setFiliais] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [erro, setErro] = useState('');
@@ -109,7 +277,6 @@ export default function Venda() {
   const [buscaSerialProduto, setBuscaSerialProduto] = useState('');
   const [aparelhoSelecionado, setAparelhoSelecionado] = useState(null);
   const [formProdutoVivo, setFormProdutoVivo] = useState({
-    tabelaPreco: '',
     sva: 'Nao',
     seguro: 'Nao',
     segmento: '',
@@ -176,12 +343,8 @@ export default function Venda() {
     api.buscarVenda(id).then((v) => carregarVendaExistente(v)).catch((e) => setErro(e.mensagem));
   }, [location.state]);
 
-  const totalAPagarCaixa = useMemo(() => {
-    return Object.entries(itensPorCategoria)
-      .filter(([cat]) => cat !== 'SERVICO_VIVO')
-      .flatMap(([, itens]) => itens)
-      .reduce((acc, item) => acc + item.valorTotal, 0);
-  }, [itensPorCategoria]);
+  // Total da venda calculado pelo backend (não recalcular no front)
+  const totalAPagarCaixa = valorTotalVenda ?? 0;
 
   const totalPagoAteAgora = useMemo(() => {
     return pagamentos.reduce((acc, p) => acc + p.valor, 0);
@@ -224,10 +387,14 @@ export default function Venda() {
     return s === 'Alta' || s === 'Reativação' || s === 'Migração' || s === 'Troca de Simcard';
   }, [servicoForm.servico]);
 
-   const valorCalculado = useMemo(
-    () => Number(aparelhoSelecionado?.preco) || 0,
-    [aparelhoSelecionado]
-  );
+  // Preço do aparelho na tabela vigente: precisa do aparelho e do plano (ou "Sem plano")
+  const tabelaProduto = api.tabelaPara(formProdutoVivo.servico);
+  const precoProduto = usePrecoItem({
+    estoqueId: aparelhoSelecionado?.produtoId,
+    plano: planoParaConsulta(formProdutoVivo.planoAtivo),
+    tabela: tabelaProduto,
+    habilitado: Boolean(aparelhoSelecionado && formProdutoVivo.planoAtivo),
+  });
 
   // Sugestões — buscam na API com debounce de 300 ms
   useEffect(() => {
@@ -295,6 +462,7 @@ export default function Venda() {
     setStatus(v.status);
     setItensPorCategoria(tela.itensPorCategoria);
     setPagamentos(tela.pagamentos);
+    setValorTotalVenda(tela.valorTotal);
   };
 
   const carregarVendaExistente = (v) => {
@@ -307,6 +475,7 @@ export default function Venda() {
 
   const resetarTela = () => {
     setVendaId(null);
+    setValorTotalVenda(null);
     setNumeroVenda('');
     setStatus('ABERTA');
     setCliente(null);
@@ -357,9 +526,21 @@ export default function Venda() {
     return vendaId;
   };
 
+  /** Adiciona o item e devolve o item gravado pelo backend (com o valor que ele calculou). */
   const enviarItem = async (corpo) => {
     const id = await garantirVenda();
-    aplicarVenda(await api.adicionarItem(id, corpo));
+    const antes = new Set(Object.values(itensPorCategoria).flat().map((i) => i.id));
+    const v = await api.adicionarItem(id, corpo);
+    aplicarVenda(v);
+    return (v.itens || []).find((i) => !antes.has(i.id)) || null;
+  };
+
+  const avisarItemGravado = (item, rotulo) => {
+    if (!item) return;
+    const extra = [item.tabelaAplicada && api.rotuloTabela(item.tabelaAplicada), item.grupoPlano && api.rotuloGrupo(item.grupoPlano)]
+      .filter(Boolean).join(' · ');
+    setMensagemSucesso(`${rotulo} adicionado: ${api.formatarMoeda(item.valorUnitario)}${extra ? ` (${extra})` : ''}.`);
+    setTimeout(() => setMensagemSucesso(''), 5000);
   };
 
   const formServicoVazio = () => ({
@@ -369,7 +550,7 @@ export default function Venda() {
   });
 
   const formProdutoVazio = () => ({
-    tabelaPreco: '', sva: 'Nao', seguro: 'Nao', segmento: '', servico: 'Troca de Aparelho', ddd: '',
+    sva: 'Nao', seguro: 'Nao', segmento: '', servico: 'Troca de Aparelho', ddd: '',
     planoAtivo: '', debitoAutomatico: false, valor: 0, valorAdicional: '', valorAcrescimo: 0.00, desconto: '',
     cupom: false, vencimentoFatura: '', numeroLinha: '', sistemaOrigem: '', numOrdemNext: '', numSolicitacaoGed: ''
   });
@@ -391,7 +572,7 @@ export default function Venda() {
 
     let descricaoCompleta = `${servicoForm.servico}: ${servicoForm.planoNovo || 'Plano Padrão'}`;
     if (requerPlanoAntigo) {
-      descricaoCompleta = `${servicoForm.servico}: [${servicoForm.planoAntigo}] ➔ [${servicoForm.planoNovo || 'Plano Novo'}]`;
+      descricaoCompleta = `${servicoForm.servico}: [${rotuloPlano(servicoForm.planoAntigo)}] ➔ [${servicoForm.planoNovo || 'Plano Novo'}]`;
     }
 
     executar(async () => {
@@ -404,7 +585,7 @@ export default function Venda() {
         tipoServico: servicoForm.servico,
         ddd: servicoForm.ddd || null,
         numeroAcesso: servicoForm.numeroLinha,
-        planoAntigo: servicoForm.planoAntigo || null,
+        planoAntigo: planoParaVenda(servicoForm.planoAntigo),
         plano: servicoForm.planoNovo || null,
         valorAdicional: num(servicoForm.valorMensalidade),   // mensalidade informada na fatura
         vencimentoFatura: servicoForm.vencimentoFatura || null,
@@ -432,27 +613,26 @@ export default function Venda() {
       return;
     }
     if (!formProdutoVivo.planoAtivo) {
-      alert('Selecione o plano ativo ou contratado do cliente para validar a venda do aparelho.');
+      alert('Selecione o plano ativo ou contratado do cliente (ou "Sem plano / Pré-pago").');
       return;
     }
+    if (precoProduto.status !== 'ok') return; // sem preço na tabela vigente: botão já fica desabilitado
     const f = formProdutoVivo;
-    const valorFinal = num(valorCalculado) || 0;
 
     executar(async () => {
-      await enviarItem({
+      const gravado = await enviarItem({
         categoria: 'PRODUTO_VIVO',
         produtoId: aparelhoSelecionado.produtoId,
         descricaoProduto: aparelhoSelecionado.nome,
         quantidade: 1,
-        valorUnitario: valorFinal,
+        valorUnitario: precoProduto.preco.preco, // informativo: o backend recalcula pela tabela vigente
         imeiOuSerial: aparelhoSelecionado.imei,
-        tabelaPreco: f.tabelaPreco || null,
         sva: sim(f.sva),
         seguro: sim(f.seguro),
         segmento: f.segmento || null,
         tipoServico: f.servico || null,
         ddd: f.ddd || null,
-        plano: f.planoAtivo,
+        plano: planoParaVenda(f.planoAtivo),
         debitoAutomatico: !!f.debitoAutomatico,
         valorAdicional: num(f.valorAdicional),
         valorAcrescimo: num(f.valorAcrescimo),
@@ -464,6 +644,7 @@ export default function Venda() {
         numOrdemNext: f.numOrdemNext || null,
         numSolicitacaoGed: f.numSolicitacaoGed || null
       });
+      avisarItemGravado(gravado, 'Aparelho');
       setModalProdutoAberto(false);
       setAparelhoSelecionado(null);
       setBuscaSerialProduto('');
@@ -942,21 +1123,6 @@ export default function Venda() {
                       </div>
                     </div>
 
-                    {/* Tabela de Preço */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
-                      <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Tabela de Preço:</label>
-                      <select
-                        value={formProdutoVivo.tabelaPreco}
-                        onChange={(e) => setFormProdutoVivo((p) => ({ ...p, tabelaPreco: e.target.value }))}
-                        style={{ ...inputStyleGlobal, width: 240 }}
-                      >
-                        <option value="">Escolha a tabela...</option>
-                        {TABELAS_PRECO.map((tab) => (
-                          <option key={tab} value={tab}>{tab}</option>
-                        ))}
-                      </select>
-                    </div>
-
                     {/* SVA */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>SVA:</label>
@@ -1043,16 +1209,30 @@ export default function Venda() {
                             <option key={d} value={d}>{d}</option>
                           ))}
                         </select>
-                        <select
+                        <ComboPlano
                           value={formProdutoVivo.planoAtivo}
-                          onChange={(e) => setFormProdutoVivo((p) => ({ ...p, planoAtivo: e.target.value }))}
-                          style={{ ...inputStyleGlobal, flex: 1 }}
-                        >
-                          <option value="">Selecione o plano já ativo / contratado...</option>
-                          {LISTA_PLANOS_DEMO.map((pl) => (
-                            <option key={pl.nome} value={pl.nome}>{pl.nome}</option>
-                          ))}
-                        </select>
+                          onChange={(valor, plano) => setFormProdutoVivo((p) => ({
+                            ...p,
+                            planoAtivo: valor,
+                            planoGrupo: valor === SEM_PLANO ? 'PRE' : plano?.grupoPlano || ''
+                          }))}
+                          placeholder="Selecione o plano já ativo / contratado..."
+                        />
+                      </div>
+                    </div>
+
+                    {/* Tabela e grupo do plano (só leitura, vindos da consulta de preço) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Tabela:</label>
+                      <div style={{ display: 'flex', gap: 24, alignItems: 'center', fontSize: 13, color: 'var(--text)' }}>
+                        <span>
+                          <b>{api.rotuloTabela(precoProduto.status === 'ok' ? precoProduto.preco.tabela : tabelaProduto)}</b>
+                          {precoProduto.status !== 'ok' && <span style={{ color: 'var(--text-faint)' }}> (prevista)</span>}
+                        </span>
+                        <span>
+                          <span style={{ color: 'var(--text-dim)' }}>Grupo do plano: </span>
+                          <b>{api.rotuloGrupo(precoProduto.status === 'ok' ? precoProduto.preco.grupoPlano : formProdutoVivo.planoGrupo)}</b>
+                        </span>
                       </div>
                     </div>
 
@@ -1083,28 +1263,11 @@ export default function Venda() {
                       Valores
                     </legend>
 
-                    {/* Valor */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
-                      <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Valor:</label>
-                      <div>
-                        {valorCalculado > 0 ? (
-                          <span style={{
-                            background: 'var(--good, #22c55e)',
-                            color: '#fff',
-                            fontWeight: 700,
-                            padding: '6px 14px',
-                            borderRadius: 6,
-                            fontSize: 13.5
-                          }}>
-                            {formatadorMoeda.format(valorCalculado)}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--warn, #f59e0b)', fontSize: 13 }}>
-                            {aparelhoSelecionado ? 'Aparelho sem preço cadastrado' : 'Selecione o aparelho'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    {/* Valor (tabela vigente, não editável) */}
+                    <PainelPreco
+                      estado={precoProduto}
+                      vazio={!aparelhoSelecionado ? 'Selecione o aparelho' : 'Selecione o plano para consultar o preço'}
+                    />
 
                     {/* Valor Adicional */}
                       <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
@@ -1259,9 +1422,11 @@ export default function Venda() {
                       type="button"
                       className="btn solid"
                       onClick={handleSalvarProdutoVivo}
-                      style={{ 
-                        display: 'inline-flex', 
-                        alignItems: 'center', 
+                      disabled={carregando || precoProduto.status !== 'ok'}
+                      title={precoProduto.status === 'semPreco' ? precoProduto.mensagem : undefined}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
                         gap: 6,
                         background: 'var(--accent, #c026d3)',
                         color: '#fff',
@@ -1269,7 +1434,8 @@ export default function Venda() {
                         padding: '6px 16px',
                         borderRadius: 6,
                         fontWeight: 700,
-                        cursor: 'pointer'
+                        cursor: carregando || precoProduto.status !== 'ok' ? 'not-allowed' : 'pointer',
+                        opacity: carregando || precoProduto.status !== 'ok' ? 0.5 : 1
                       }}
                     >
                       Salvar <Check size={16} />
@@ -1306,6 +1472,12 @@ export default function Venda() {
                           <td className="mono" style={{ padding: '12px 16px', color: 'var(--accent)' }}>{item.imeiOuSerial}</td>
                           <td style={{ padding: '12px 16px', color: 'var(--text-faint)' }}>
                             {item.numeroLinha || '—'} {item.detalhes?.planoAtivo ? `(${item.detalhes.planoAtivo})` : ''}
+                            {(item.tabelaAplicada || item.grupoPlano) && (
+                              <div style={{ fontSize: 11.5 }}>
+                                {[item.tabelaAplicada && api.rotuloTabela(item.tabelaAplicada), item.grupoPlano && api.rotuloGrupo(item.grupoPlano)]
+                                  .filter(Boolean).join(' · ')}
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: '12px 16px', textAlign: 'right' }}>{item.quantidade}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: 'var(--good)' }} className="mono">
@@ -1355,16 +1527,12 @@ export default function Venda() {
                 {requerPlanoAntigo && (
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                     <label style={{ margin: 0, color: 'var(--warn)', fontWeight: 600 }}>Plano Antigo / Atual:</label>
-                    <select
-                      style={{ ...inputStyleGlobal, borderColor: 'var(--warn)' }}
+                    <ComboPlano
                       value={servicoForm.planoAntigo}
-                      onChange={(e) => setServicoForm((prev) => ({ ...prev, planoAntigo: e.target.value }))}
-                    >
-                      <option value="">Selecione o plano de origem...</option>
-                      {LISTA_PLANOS_DEMO.map((p) => (
-                        <option key={p.nome} value={p.nome}>{p.nome}</option>
-                      ))}
-                    </select>
+                      onChange={(valor) => setServicoForm((prev) => ({ ...prev, planoAntigo: valor }))}
+                      placeholder="Selecione o plano de origem..."
+                      destaque="var(--warn)"
+                    />
                   </div>
                 )}
 
