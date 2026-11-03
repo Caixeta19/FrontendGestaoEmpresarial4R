@@ -1,5 +1,32 @@
 import { request } from './api';
 
+// ---------------------------------------------------------------- utilitários
+/** O backend pode devolver um array simples ou uma Page ({ content: [...] }). */
+const comoLista = (r) => (Array.isArray(r) ? r : (r?.content ?? []));
+
+// Aceita número, "4230.45" (formato API) ou "R$ 4.230,45" (formato BR)
+const parseMoedaParaNumero = (valorStr) => {
+  if (valorStr === null || valorStr === undefined || valorStr === '') return 0;
+  if (typeof valorStr === 'number') return Number.isFinite(valorStr) ? valorStr : 0;
+  let s = String(valorStr).replace(/[^\d,.-]/g, '');
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); // formato BR
+  const n = parseFloat(s);
+  return Number.isNaN(n) ? 0 : n;
+};
+
+// Primeiro campo de preço > 0 encontrado no objeto
+const primeiroPreco = (o = {}) => {
+  const candidatos = [
+    o.valorVenda, o.valor, o.precoVenda, o.precoBase, o.precoVarejo,
+    o.preco, o.valorUnitario, o.produto?.precoBase, o.produto?.preco,
+  ];
+  for (const c of candidatos) {
+    const n = parseMoedaParaNumero(c);
+    if (n > 0) return n;
+  }
+  return 0;
+};
+
 // ---------------------------------------------------------------- formas de pagamento
 export const FORMA_ENUM = {
   'Cartão de Crédito': 'CARTAO_CREDITO',
@@ -17,7 +44,6 @@ const dataHora = (iso) =>
 // ---------------------------------------------------------------- acesso / cadastros
 export const login = (email, senha) => request('/auth/login', { method: 'POST', body: { email, senha } });
 
-// Passa pelo request(): usa API_BASE (com /api), o token e o tratamento de erro padrão.
 export const alterarSenha = (senhaAtual, novaSenha) =>
   request('/auth/alterar-senha', { method: 'POST', body: { senhaAtual, novaSenha } });
 
@@ -25,24 +51,47 @@ export const listarFiliais = () => request('/filiais');
 export const listarVendedores = () => request('/usuarios');
 
 export async function buscarClientes(busca) {
-  const page = await request('/clientes', { params: { busca, size: 8 } });
-  return (page?.content ?? []).map((c) => ({ id: c.id, nome: c.nome, doc: c.cpfCnpj }));
+  const lista = comoLista(await request('/clientes', { params: { busca, size: 8 } }));
+  return lista.map((c) => ({ id: c.id, nome: c.nome, doc: c.cpfCnpj }));
 }
 
-// ---------------------------------------------------------------- catálogo para o PDV
-/** Aparelhos (serial/IMEI disponível) no formato que a tela já consome. */
+// ---------------------------------------------------------------- catálogo para o PDV (estoque unificado)
+/** Unidades DISPONIVEL de tb_estoque_geral (GET /estoque-geral/disponiveis) */
+const buscarDisponiveis = async (busca, limite = 20) =>
+  comoLista(await request('/estoque-geral/disponiveis', { params: { busca, filial: '', limite } }));
+
+const ehAcessorio = (s) =>
+  Boolean(s.codigoAcessorio) || String(s.categoria || '').toUpperCase() === 'ACESSORIO';
+
+/** Aparelhos (serial/IMEI disponível) com o preço vindo do estoque unificado */
 export async function buscarAparelhos(busca) {
-  const lista = await request('/estoque/seriais', { params: { busca, limite: 20 } });
-  return (lista ?? [])
-    .filter((s) => s.categoria === 'PRODUTO_VIVO')
-    .map((s) => ({ produtoId: s.produtoId, nome: s.descricao, imei: s.serialImei, preco: Number(s.precoBase), cat: 'Produto Vivo' }));
+  const lista = await buscarDisponiveis(busca, 20);
+  return lista
+    .filter((s) => !ehAcessorio(s))
+    .map((s) => ({
+      produtoId: s.id, // id da linha em tb_estoque_geral
+      nome: s.modeloComercial || 'Aparelho Vivo',
+      imei: s.serial,
+      preco: primeiroPreco(s),
+      cor: s.cor,
+      cat: 'Produto Vivo',
+    }))
+    .filter((a) => a.imei);
 }
 
+/** Acessórios */
 export async function buscarAcessorios(busca) {
-  const lista = await request('/produtos', { params: { busca, categoria: 'ACESSORIO' } });
-  return (lista ?? [])
+  const lista = await buscarDisponiveis(busca, 30);
+  return lista
+    .filter(ehAcessorio)
     .slice(0, 8)
-    .map((p) => ({ produtoId: p.id, nome: p.descricao, sku: p.sku, preco: Number(p.precoBase), requerSerial: p.requerSerial }));
+    .map((s) => ({
+      produtoId: s.id,
+      nome: s.modeloComercial || 'Acessório',
+      sku: s.codigoAcessorio || s.serial, // acessório migrado pode não ter código: usa o serial
+      preco: primeiroPreco(s),
+      requerSerial: false,
+    }));
 }
 
 // ---------------------------------------------------------------- vendas
@@ -59,8 +108,8 @@ export const mudarStatus = (id, novoStatus, credenciais) =>
   request(`/vendas/${id}/status`, { method: 'PATCH', body: { novoStatus, autenticacaoUsuario: credenciais } });
 
 export async function listarVendas(filtros = {}) {
-  const lista = await request('/vendas', { params: filtros });
-  return (lista ?? []).map(vendaParaLinha);
+  const lista = comoLista(await request('/vendas', { params: filtros }));
+  return lista.map(vendaParaLinha);
 }
 
 // ---------------------------------------------------------------- adaptadores (API -> telas)

@@ -1,24 +1,54 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  PlusCircle, 
-  Search, 
-  Eye, 
-  HelpCircle, 
-  ArrowLeft, 
-  Check, 
-  ChevronUp, 
-  ChevronDown, 
-  Edit, 
-  Trash2, 
-  Play, 
-  UserCheck, 
+import {
+  PlusCircle,
+  Search,
+  Eye,
+  HelpCircle,
+  ArrowLeft,
+  Check,
+  ChevronUp,
+  ChevronDown,
+  Edit,
+  Trash2,
+  Play,
   ShoppingCart,
-  AlertTriangle,
-  RotateCcw
+  AlertTriangle
 } from 'lucide-react';
 import { useToast } from '../components/ToastContext.jsx';
-import { clientesDemo, PDVS } from '../data/demoData';
+import { PDVS } from '../data/demoData';
+import { clientesApi } from '../services/clientesApi';
+
+const ITENS_POR_PAGINA = 10;
+const FILTROS_VAZIOS = { nome: '', documento: '', telefone: '', pdv: 'Todos' };
+
+const FORM_VAZIO = {
+  nome: '',
+  doc: '',
+  celular: '',
+  telefone: '',
+  email: '',
+  pdv: 'CE - CANINDE',
+  // Endereço Principal
+  cep: '',
+  estado: 'GO',
+  cidade: 'Luziânia',
+  rua: '',
+  bairro: '',
+  numero: '',
+  semNumero: false,
+  complemento: '',
+  zonaRural: false,
+  // Dados Complementares
+  contatoNome: '',
+  contatoEmail: '',
+  observacao: '',
+  restricao: 'Não',
+  receberMensagens: 'Sim',
+  origemCadastro: 'Loja Física',
+  scoreCliente: '',
+  vencimentoFatura: 'Dia 01'
+};
 
 export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
   const navigate = useNavigate();
@@ -36,70 +66,54 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
   const [mensagemErro, setMensagemErro] = useState('');
   const [docFeedback, setDocFeedback] = useState({ text: '', color: '' });
 
-  // Base Dinâmica de Clientes
-  const [listaClientes, setListaClientes] = useState(() => {
-    const salvos = localStorage.getItem('syscor_clientes');
-    if (salvos) {
-      try { return JSON.parse(salvos); } catch {}
-    }
-    return (clientesDemo || []).map(c => ({
-      id: String(c.id || Math.floor(Math.random() * 90000) + 10000),
-      nome: c.nome || '',
-      doc: c.doc || c.documento || c.cpf || c.cnpj || '—',
-      celular: c.celular || c.telefone || '—',
-      telefone: c.telefone || '—',
-      email: c.email || '—',
-      pdv: c.pdv || 'CE - CANINDE',
-      cidade: c.cidade || 'Luziânia',
-      estado: c.estado || 'GO',
-      dataCadastro: c.data || '25/09/2026'
-    }));
-  });
+  // Dados vindos do backend (paginação no servidor)
+  const [itens, setItens] = useState([]);
+  const [totalRegistos, setTotalRegistos] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+  const [carregando, setCarregando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
 
   // Formulário de Cadastro / Edição
   const [clienteEdicaoId, setClienteEdicaoId] = useState(null);
-  const [formData, setFormData] = useState({
-    nome: '',
-    doc: '',
-    celular: '',
-    telefone: '',
-    email: '',
-    pdv: 'CE - CANINDE',
-    // Endereço Principal
-    cep: '',
-    estado: 'GO',
-    cidade: 'Luziânia',
-    rua: '',
-    bairro: '',
-    numero: '',
-    semNumero: false,
-    complemento: '',
-    zonaRural: false,
-    // Dados Complementares
-    contatoNome: '',
-    contatoEmail: '',
-    observacao: '',
-    restricao: 'Não',
-    receberMensagens: 'Sim',
-    origemCadastro: 'Loja Física',
-    scoreCliente: '',
-    vencimentoFatura: 'Dia 01'
-  });
+  const [formData, setFormData] = useState(FORM_VAZIO);
 
-  // Formulário de Busca
-  const [filtrosBusca, setFiltrosBusca] = useState({
-    nome: '',
-    documento: '',
-    telefone: '',
-    pdv: 'Todos'
-  });
+  // Filtros: "filtrosBusca" = o que está digitado; "filtrosAplicados" = o que dispara a requisição
+  const [filtrosBusca, setFiltrosBusca] = useState(FILTROS_VAZIOS);
+  const [filtrosAplicados, setFiltrosAplicados] = useState(FILTROS_VAZIOS);
 
   // Paginação
   const [paginaAtual, setPaginaAtual] = useState(1);
-  const ITENS_POR_PAGINA = 10;
 
+  const indiceInicial = (paginaAtual - 1) * ITENS_POR_PAGINA;
+  const indiceFinal = Math.min(indiceInicial + itens.length, totalRegistos);
+
+  // ---------------------------------------------------------------------------
+  // Carregamento da lista
+  // ---------------------------------------------------------------------------
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    try {
+      const r = await clientesApi.listar(filtrosAplicados, paginaAtual - 1, ITENS_POR_PAGINA);
+      setItens(r.content || []);
+      setTotalRegistos(r.totalElements || 0);
+      setTotalPaginas(r.totalPages || 1);
+    } catch (err) {
+      if (showToast) showToast(err.message || 'Erro ao carregar clientes.');
+      else alert(err.message || 'Erro ao carregar clientes.');
+    } finally {
+      setCarregando(false);
+    }
+  }, [filtrosAplicados, paginaAtual]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (visualizacaoAtual === 'LISTA') carregar();
+  }, [visualizacaoAtual, carregar]);
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
   function validarDoc(value) {
-    setFormData(prev => ({ ...prev, doc: value }));
+    setFormData((prev) => ({ ...prev, doc: value }));
     const v = value.replace(/\D/g, '');
     if (v.length === 0) setDocFeedback({ text: '', color: '' });
     else if (v.length === 11) setDocFeedback({ text: 'CPF em formato válido.', color: 'var(--good, #22c55e)' });
@@ -107,63 +121,19 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
     else setDocFeedback({ text: 'Documento incompleto.', color: 'var(--warn, #eab308)' });
   }
 
-  // Filtragem Dinâmica
-  const clientesFiltrados = useMemo(() => {
-    return listaClientes.filter(c => {
-      if (filtrosBusca.pdv !== 'Todos' && c.pdv && c.pdv.toUpperCase() !== filtrosBusca.pdv.toUpperCase()) {
-        return false;
-      }
-      if (filtrosBusca.documento) {
-        const docBusca = filtrosBusca.documento.replace(/\D/g, '');
-        const docItem = String(c.doc || '').replace(/\D/g, '');
-        if (docBusca && !docItem.includes(docBusca)) return false;
-      }
-      if (filtrosBusca.nome) {
-        const nomeBusca = filtrosBusca.nome.toLowerCase().trim();
-        if (!String(c.nome || '').toLowerCase().includes(nomeBusca)) return false;
-      }
-      if (filtrosBusca.telefone) {
-        const telBusca = filtrosBusca.telefone.replace(/\D/g, '');
-        const telItem = String(c.celular || c.telefone || '').replace(/\D/g, '');
-        if (telBusca && !telItem.includes(telBusca)) return false;
-      }
-      return true;
-    });
-  }, [listaClientes, filtrosBusca]);
+  const abrirLista = (filtros) => {
+    setFiltrosBusca(filtros);
+    setFiltrosAplicados(filtros);
+    setPaginaAtual(1);
+    setVisualizacaoAtual('LISTA');
+  };
 
-  const totalRegistos = clientesFiltrados.length;
-  const totalPaginas = Math.ceil(totalRegistos / ITENS_POR_PAGINA) || 1;
-  const indiceInicial = (paginaAtual - 1) * ITENS_POR_PAGINA;
-  const indiceFinal = Math.min(indiceInicial + ITENS_POR_PAGINA, totalRegistos);
-  const itensPaginaAtual = clientesFiltrados.slice(indiceInicial, indiceFinal);
-
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
   const handleIniciarNovoCliente = () => {
     setClienteEdicaoId(null);
-    setFormData({
-      nome: '',
-      doc: '',
-      celular: '',
-      telefone: '',
-      email: '',
-      pdv: 'CE - CANINDE',
-      cep: '',
-      estado: 'GO',
-      cidade: 'Luziânia',
-      rua: '',
-      bairro: '',
-      numero: '',
-      semNumero: false,
-      complemento: '',
-      zonaRural: false,
-      contatoNome: '',
-      contatoEmail: '',
-      observacao: '',
-      restricao: 'Não',
-      receberMensagens: 'Sim',
-      origemCadastro: 'Loja Física',
-      scoreCliente: '',
-      vencimentoFatura: 'Dia 01'
-    });
+    setFormData(FORM_VAZIO);
     setDocFeedback({ text: '', color: '' });
     setVisualizacaoAtual('CADASTRO');
   };
@@ -172,10 +142,10 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
     setClienteEdicaoId(c.id);
     setFormData({
       nome: c.nome || '',
-      doc: c.doc || '',
-      celular: c.celular !== '—' ? c.celular : '',
-      telefone: c.telefone !== '—' ? c.telefone : '',
-      email: c.email !== '—' ? c.email : '',
+      doc: c.doc && c.doc !== '—' ? c.doc : '',
+      celular: c.celular && c.celular !== '—' ? c.celular : '',
+      telefone: c.telefone && c.telefone !== '—' ? c.telefone : '',
+      email: c.email && c.email !== '—' ? c.email : '',
       pdv: c.pdv || 'CE - CANINDE',
       cep: c.cep || '',
       estado: c.estado || 'GO',
@@ -195,62 +165,59 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
       scoreCliente: c.scoreCliente || '',
       vencimentoFatura: c.vencimentoFatura || 'Dia 01'
     });
-    validarDoc(c.doc || '');
+    validarDoc(c.doc && c.doc !== '—' ? c.doc : '');
     setVisualizacaoAtual('CADASTRO');
   };
 
-  const handleSalvarCliente = (e) => {
+  const handleSalvarCliente = async (e) => {
     e.preventDefault();
     if (!formData.nome.trim() || !formData.doc.trim()) {
-      alert('Preencha ao menos o Nome completo e o CPF/CNPJ.');
+      const msg = 'Preencha ao menos o Nome completo e o CPF/CNPJ.';
+      if (showToast) showToast(msg);
+      else alert(msg);
       return;
     }
 
-    let novaLista = [...listaClientes];
-
-    if (clienteEdicaoId) {
-      novaLista = novaLista.map(item => {
-        if (item.id === clienteEdicaoId) {
-          return {
-            ...item,
-            ...formData,
-            id: clienteEdicaoId
-          };
-        }
-        return item;
-      });
-      if (showToast) showToast('Cliente atualizado com sucesso.');
-      else alert('Cliente atualizado com sucesso!');
-    } else {
-      const novoReg = {
-        ...formData,
-        id: String(Math.floor(Math.random() * 90000) + 10000),
-        dataCadastro: new Date().toLocaleDateString('pt-BR')
-      };
-      novaLista = [novoReg, ...novaLista];
-      if (showToast) showToast('Cliente cadastrado com sucesso.');
-      else alert(`Cliente ${novoReg.nome} cadastrado com sucesso!`);
+    setSalvando(true);
+    try {
+      await clientesApi.salvar(clienteEdicaoId, formData);
+      const msg = clienteEdicaoId ? 'Cliente atualizado com sucesso.' : 'Cliente cadastrado com sucesso.';
+      if (showToast) showToast(msg);
+      else alert(msg);
+      abrirLista(FILTROS_VAZIOS);
+    } catch (err) {
+      const msg = err.status === 409 ? 'CPF/CNPJ já cadastrado.' : err.message || 'Erro ao salvar cliente.';
+      if (showToast) showToast(msg);
+      else alert(msg);
+    } finally {
+      setSalvando(false);
     }
-
-    setListaClientes(novaLista);
-    localStorage.setItem('syscor_clientes', JSON.stringify(novaLista));
-    setVisualizacaoAtual('LISTA');
   };
 
-  const handleRemoverCliente = (id) => {
-    if (window.confirm('Tem certeza que deseja excluir o cadastro deste cliente?')) {
-      const novaLista = listaClientes.filter(c => c.id !== id);
-      setListaClientes(novaLista);
-      localStorage.setItem('syscor_clientes', JSON.stringify(novaLista));
+  const handleRemoverCliente = async (id) => {
+    if (!window.confirm('Tem certeza que deseja excluir o cadastro deste cliente?')) return;
+    try {
+      await clientesApi.remover(id);
       if (showToast) showToast('Cliente removido com sucesso.');
+      // se removeu o último item da página, volta uma página
+      if (itens.length === 1 && paginaAtual > 1) setPaginaAtual((p) => p - 1);
+      else carregar();
+    } catch (err) {
+      const msg = err.message || 'Erro ao remover cliente.';
+      if (showToast) showToast(msg);
+      else alert(msg);
     }
   };
 
   const handleLancarVendaComCliente = (c) => {
-    sessionStorage.setItem('syscor_venda_edicao', JSON.stringify({
-      cliente: c.nome,
-      clienteDoc: c.doc
-    }));
+    sessionStorage.setItem(
+      'syscor_venda_edicao',
+      JSON.stringify({
+        clienteId: c.id,
+        cliente: c.nome,
+        clienteDoc: c.doc
+      })
+    );
     navigate('/venda');
   };
 
@@ -266,6 +233,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
       return;
     }
 
+    setFiltrosAplicados(filtrosBusca);
     setPaginaAtual(1);
     setVisualizacaoAtual('LISTA');
   };
@@ -303,7 +271,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
           {seccaoAberta && (
             <div style={conteudoAbertoEstilo}>
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                
+
                 {/* Botão 1: Inserir Registro */}
                 <button
                   type="button"
@@ -335,11 +303,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
                 {/* Botão 3: Ver Todos */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setFiltrosBusca({ nome: '', documento: '', telefone: '', pdv: 'Todos' });
-                    setPaginaAtual(1);
-                    setVisualizacaoAtual('LISTA');
-                  }}
+                  onClick={() => abrirLista(FILTROS_VAZIOS)}
                   style={botaoQuadradoEstilo}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent, #c026d3)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.transform = 'translateY(0)'; }}
@@ -480,7 +444,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
                 style={{ ...inputEstiloFormulario, maxWidth: 300 }}
               >
                 <option value="Todos">Todos</option>
-                {(PDVS || []).map(p => (
+                {(PDVS || []).map((p) => (
                   <option key={p.id} value={p.codigo}>{p.codigo} — {p.nome}</option>
                 ))}
               </select>
@@ -547,9 +511,9 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
                 <HelpCircle size={18} />
               </button>
 
-              <button 
-                type="button" 
-                onClick={() => { setFiltrosBusca({ nome: '', documento: '', telefone: '', pdv: 'Todos' }); setPaginaAtual(1); }}
+              <button
+                type="button"
+                onClick={() => abrirLista(FILTROS_VAZIOS)}
                 style={{ ...botaoBarraSuperior, background: '#581c87', color: '#fff' }}
               >
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.8)' }}>Ver Todos</span>
@@ -582,24 +546,30 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
                 </tr>
               </thead>
               <tbody>
-                {itensPaginaAtual.length === 0 ? (
+                {carregando ? (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '30px 14px', color: 'var(--text-faint)' }}>
+                      Carregando clientes...
+                    </td>
+                  </tr>
+                ) : itens.length === 0 ? (
                   <tr>
                     <td colSpan={6} style={{ textAlign: 'center', padding: '30px 14px', color: 'var(--text-faint)' }}>
                       Nenhum cliente encontrado para os filtros selecionados.
                     </td>
                   </tr>
                 ) : (
-                  itensPaginaAtual.map((c) => (
-                    <tr 
-                      key={c.id} 
+                  itens.map((c) => (
+                    <tr
+                      key={c.id}
                       style={{ borderBottom: '1px solid var(--line)', color: 'var(--text)', transition: 'background 0.15s ease' }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--panel-2)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'var(--panel)'}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--panel)')}
                     >
                       <td style={{ padding: '12px 14px', fontWeight: 600 }}>{c.id}</td>
                       <td style={{ padding: '12px 14px', fontWeight: 600 }}>{c.nome}</td>
-                      <td style={{ padding: '12px 14px' }} className="mono">{c.doc}</td>
-                      <td style={{ padding: '12px 14px' }}>{c.celular || c.telefone}</td>
+                      <td style={{ padding: '12px 14px' }} className="mono">{c.doc || '—'}</td>
+                      <td style={{ padding: '12px 14px' }}>{c.celular || c.telefone || '—'}</td>
                       <td style={{ padding: '12px 14px', color: 'var(--text-faint)' }}>
                         {c.pdv || `${c.cidade || '—'} / ${c.estado || '—'}`}
                       </td>
@@ -638,7 +608,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
             </table>
           </div>
 
-          {/* Paginação Roxa Oficial */}
+          {/* Paginação */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', background: '#581c87', color: '#ffffff', borderRadius: 4, overflow: 'hidden', fontSize: 12.5 }}>
               <span style={{ padding: '6px 14px', fontWeight: 600 }}>
@@ -646,33 +616,57 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
               </span>
               <button
                 type="button"
-                onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
+                onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
                 disabled={paginaAtual === 1}
-                style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '6px 10px' }}
+                style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '6px 10px', opacity: paginaAtual === 1 ? 0.4 : 1 }}
               >
                 <Play size={10} style={{ transform: 'rotate(180deg)', fill: 'currentColor' }} />
               </button>
-              {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => (
-                <button
-                  key={i + 1}
-                  type="button"
-                  onClick={() => setPaginaAtual(i + 1)}
-                  style={{ background: paginaAtual === i + 1 ? '#7e22ce' : 'transparent', border: 'none', color: '#fff', fontWeight: 700, padding: '6px 12px', cursor: 'pointer' }}
-                >
-                  {i + 1}
-                </button>
-              ))}
+              {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
+                // janela de até 5 páginas acompanhando a página atual
+                const inicio = Math.max(1, Math.min(paginaAtual - 2, totalPaginas - 4));
+                const pagina = inicio + i;
+                return (
+                  <button
+                    key={pagina}
+                    type="button"
+                    onClick={() => setPaginaAtual(pagina)}
+                    style={{ background: paginaAtual === pagina ? '#7e22ce' : 'transparent', border: 'none', color: '#fff', fontWeight: 700, padding: '6px 12px', cursor: 'pointer' }}
+                  >
+                    {pagina}
+                  </button>
+                );
+              })}
               <button
                 type="button"
-                onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
+                onClick={() => setPaginaAtual((p) => Math.min(totalPaginas, p + 1))}
                 disabled={paginaAtual === totalPaginas}
-                style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '6px 10px' }}
+                style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: '6px 10px', opacity: paginaAtual === totalPaginas ? 0.4 : 1 }}
               >
                 <Play size={10} style={{ fill: 'currentColor' }} />
               </button>
             </div>
           </div>
         </div>
+
+        {/* Modal Ajuda (também disponível na lista) */}
+        {modalAjudaAberto && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: 24, maxWidth: 460, width: '90%', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <h3 style={{ margin: 0, color: 'var(--text)' }}>Ajuda — Módulo de Clientes</h3>
+              <p style={{ fontSize: 13.5, color: 'var(--text-dim)', lineHeight: 1.5, margin: 0 }}>
+                Cadastre e consulte os dados completos de clientes e leads (Pessoa Física ou Jurídica). Ao localizar um cliente na listagem, você pode acionar diretamente o lançamento de venda associado ou editar os dados cadastrais.
+              </p>
+              <button
+                type="button"
+                onClick={() => setModalAjudaAberto(false)}
+                style={{ alignSelf: 'flex-end', background: 'var(--accent, #c026d3)', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -710,16 +704,16 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
         </div>
 
         <form onSubmit={handleSalvarCliente} style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%', boxSizing: 'border-box' }}>
-          
+
           {/* DADOS PRINCIPAIS */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Nome completo / Razão Social:</label>
-              <input 
-                type="text" 
-                placeholder="Nome do cliente" 
+              <input
+                type="text"
+                placeholder="Nome do cliente"
                 value={formData.nome}
-                onChange={(e) => setFormData(prev => ({ ...prev, nome: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
                 style={inputEstiloFormulario}
                 required
               />
@@ -727,11 +721,11 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>CPF / CNPJ:</label>
-              <input 
-                type="text" 
-                placeholder="000.000.000-00" 
-                value={formData.doc} 
-                onChange={(e) => validarDoc(e.target.value)} 
+              <input
+                type="text"
+                placeholder="000.000.000-00"
+                value={formData.doc}
+                onChange={(e) => validarDoc(e.target.value)}
                 style={inputEstiloFormulario}
                 required
               />
@@ -742,11 +736,11 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>E-mail:</label>
-              <input 
-                type="email" 
-                placeholder="cliente@email.com" 
+              <input
+                type="email"
+                placeholder="cliente@email.com"
                 value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
                 style={inputEstiloFormulario}
               />
             </div>
@@ -761,16 +755,16 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
               <div style={{ flex: 1, maxWidth: 220, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>CEP:</label>
-                <input 
-                  type="text" 
-                  placeholder="00000-000" 
+                <input
+                  type="text"
+                  placeholder="00000-000"
                   value={formData.cep}
-                  onChange={(e) => setFormData(prev => ({ ...prev, cep: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, cep: e.target.value }))}
                   style={inputEstiloFormulario}
                 />
               </div>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => alert('Consulta de CEP simulada!')}
                 style={{ background: 'var(--accent, #c026d3)', color: '#fff', border: 'none', height: 36, padding: '0 16px', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
               >
@@ -781,9 +775,9 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Estado (UF):</label>
-                <select 
+                <select
                   value={formData.estado}
-                  onChange={(e) => setFormData(prev => ({ ...prev, estado: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, estado: e.target.value }))}
                   style={inputEstiloFormulario}
                 >
                   <option value="GO">GO</option>
@@ -795,10 +789,10 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Cidade:</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.cidade}
-                  onChange={(e) => setFormData(prev => ({ ...prev, cidade: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, cidade: e.target.value }))}
                   style={inputEstiloFormulario}
                 />
               </div>
@@ -807,22 +801,22 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Rua:</label>
-                <input 
-                  type="text" 
-                  placeholder="Nome da rua / avenida" 
+                <input
+                  type="text"
+                  placeholder="Nome da rua / avenida"
                   value={formData.rua}
-                  onChange={(e) => setFormData(prev => ({ ...prev, rua: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, rua: e.target.value }))}
                   style={inputEstiloFormulario}
                 />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Bairro:</label>
-                <input 
-                  type="text" 
-                  placeholder="Bairro" 
+                <input
+                  type="text"
+                  placeholder="Bairro"
                   value={formData.bairro}
-                  onChange={(e) => setFormData(prev => ({ ...prev, bairro: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, bairro: e.target.value }))}
                   style={inputEstiloFormulario}
                 />
               </div>
@@ -831,22 +825,22 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
             <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 16, alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Nº:</label>
-                <input 
-                  type="text" 
-                  placeholder="Nº" 
+                <input
+                  type="text"
+                  placeholder="Nº"
                   disabled={formData.semNumero}
                   value={formData.numero}
-                  onChange={(e) => setFormData(prev => ({ ...prev, numero: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, numero: e.target.value }))}
                   style={{ ...inputEstiloFormulario, opacity: formData.semNumero ? 0.5 : 1 }}
                 />
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 20 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, margin: 0, color: 'var(--text)' }}>
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={formData.semNumero}
-                    onChange={(e) => setFormData(prev => ({ ...prev, semNumero: e.target.checked }))}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, semNumero: e.target.checked }))}
                   />
                   <span>Sem número</span>
                 </label>
@@ -855,11 +849,11 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Complemento:</label>
-              <input 
-                type="text" 
-                placeholder="Apto, Bloco, Quadra..." 
+              <input
+                type="text"
+                placeholder="Apto, Bloco, Quadra..."
                 value={formData.complemento}
-                onChange={(e) => setFormData(prev => ({ ...prev, complemento: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, complemento: e.target.value }))}
                 style={inputEstiloFormulario}
               />
             </div>
@@ -874,22 +868,22 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Celular:</label>
-                <input 
-                  type="text" 
-                  placeholder="(61) 90000-0000" 
+                <input
+                  type="text"
+                  placeholder="(61) 90000-0000"
                   value={formData.celular}
-                  onChange={(e) => setFormData(prev => ({ ...prev, celular: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, celular: e.target.value }))}
                   style={inputEstiloFormulario}
                 />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Telefone:</label>
-                <input 
-                  type="text" 
-                  placeholder="(61) 3000-0000" 
+                <input
+                  type="text"
+                  placeholder="(61) 3000-0000"
                   value={formData.telefone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, telefone: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, telefone: e.target.value }))}
                   style={inputEstiloFormulario}
                 />
               </div>
@@ -897,11 +891,11 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>Observações:</label>
-              <textarea 
+              <textarea
                 rows={3}
                 placeholder="Observações adicionais sobre o cliente..."
                 value={formData.observacao}
-                onChange={(e) => setFormData(prev => ({ ...prev, observacao: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, observacao: e.target.value }))}
                 style={{ ...inputEstiloFormulario, resize: 'vertical' }}
               />
             </div>
@@ -909,31 +903,34 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
 
           {/* Rodapé de Ações */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => setVisualizacaoAtual('HUB')}
+              disabled={salvando}
               style={{ background: 'transparent', border: '1px solid var(--line)', color: 'var(--text)', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
             >
               Cancelar
             </button>
 
-            <button 
-              type="submit" 
-              style={{ 
-                background: '#84cc16', 
-                color: '#fff', 
-                border: 'none', 
-                borderRadius: 6, 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 6, 
-                padding: '8px 24px', 
-                fontWeight: 700, 
-                fontSize: 13.5, 
-                cursor: 'pointer' 
+            <button
+              type="submit"
+              disabled={salvando}
+              style={{
+                background: '#84cc16',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 24px',
+                fontWeight: 700,
+                fontSize: 13.5,
+                cursor: salvando ? 'not-allowed' : 'pointer',
+                opacity: salvando ? 0.7 : 1
               }}
             >
-              Salvar cliente <Check size={16} strokeWidth={3} />
+              {salvando ? 'Salvando...' : <>Salvar cliente <Check size={16} strokeWidth={3} /></>}
             </button>
           </div>
 

@@ -224,6 +224,11 @@ export default function Venda() {
     return s === 'Alta' || s === 'Reativação' || s === 'Migração' || s === 'Troca de Simcard';
   }, [servicoForm.servico]);
 
+   const valorCalculado = useMemo(
+    () => Number(aparelhoSelecionado?.preco) || 0,
+    [aparelhoSelecionado]
+  );
+
   // Sugestões — buscam na API com debounce de 300 ms
   useEffect(() => {
     const termo = buscaCliente.trim();
@@ -416,10 +421,9 @@ export default function Venda() {
     });
   };
 
-  const handleSelecionarAparelho = (ap) => {
+   const handleSelecionarAparelho = (ap) => {
     setAparelhoSelecionado(ap);
     setBuscaSerialProduto(ap.imei);
-    setFormProdutoVivo((prev) => ({ ...prev, valor: ap.preco || 0 }));
   };
 
   const handleSalvarProdutoVivo = () => {
@@ -432,7 +436,7 @@ export default function Venda() {
       return;
     }
     const f = formProdutoVivo;
-    const valorFinal = num(f.valor) || 0;
+    const valorFinal = num(valorCalculado) || 0;
 
     executar(async () => {
       await enviarItem({
@@ -623,7 +627,7 @@ export default function Venda() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Pencil size={20} color="var(--accent, #c026d3)" />
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, textTransform: 'uppercase', color: 'var(--text)' }}>
-            Lançar Venda <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-faint)' }}>#{numeroVenda || 'NOVA'}</span>
+            Lançar Venda <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-faint)' }}></span>
           </h1>
         </div>
         <span className="badge neutral" style={{
@@ -1083,30 +1087,36 @@ export default function Venda() {
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Valor:</label>
                       <div>
-                        <span style={{
-                          background: 'var(--good, #22c55e)',
-                          color: '#fff',
-                          fontWeight: 700,
-                          padding: '6px 14px',
-                          borderRadius: 6,
-                          fontSize: 13.5
-                        }}>
-                          {formatadorMoeda.format(formProdutoVivo.valor)}
-                        </span>
+                        {valorCalculado > 0 ? (
+                          <span style={{
+                            background: 'var(--good, #22c55e)',
+                            color: '#fff',
+                            fontWeight: 700,
+                            padding: '6px 14px',
+                            borderRadius: 6,
+                            fontSize: 13.5
+                          }}>
+                            {formatadorMoeda.format(valorCalculado)}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--warn, #f59e0b)', fontSize: 13 }}>
+                            {aparelhoSelecionado ? 'Aparelho sem preço cadastrado' : 'Selecione o aparelho'}
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     {/* Valor Adicional */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
-                      <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Valor Adicional:</label>
-                      <input
-                        type="text"
-                        placeholder="0,00"
-                        value={formProdutoVivo.valorAdicional}
-                        onChange={(e) => setFormProdutoVivo((p) => ({ ...p, valorAdicional: e.target.value }))}
-                        style={{ ...inputStyleGlobal, width: 140 }}
-                      />
-                    </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
+                        <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Valor Adicional:</label>
+                        <input
+                          type="text"
+                          placeholder="0,00"
+                          value={formProdutoVivo.valorAdicional}
+                          onChange={(e) => setFormProdutoVivo((p) => ({ ...p, valorAdicional: e.target.value }))}
+                          style={{ ...inputStyleGlobal, width: 140 }}
+                        />
+                      </div>
 
                     {/* Valor Acréscimo */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
