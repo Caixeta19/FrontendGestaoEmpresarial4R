@@ -312,7 +312,7 @@ export default function Venda() {
     clientePossuiSimcard: false,
     simcardDoado: false,
     descontoChip: '',
-    valorChip: '',
+    cobrarChip: false,
     serialConfirmado: false
   });
 
@@ -389,6 +389,12 @@ export default function Venda() {
 
   // Preço do aparelho na tabela vigente: precisa do aparelho e do plano (ou "Sem plano")
   const tabelaProduto = api.tabelaPara(formProdutoVivo.servico);
+  // Acessório: mesma consulta, sem plano (grupo SEM_PLANO)
+  const precoAcessorio = usePrecoItem({
+    estoqueId: acessorioSelecionado?.produtoId,
+    habilitado: Boolean(acessorioSelecionado),
+  });
+
   const precoProduto = usePrecoItem({
     estoqueId: aparelhoSelecionado?.produtoId,
     plano: planoParaConsulta(formProdutoVivo.planoAtivo),
@@ -546,7 +552,7 @@ export default function Venda() {
   const formServicoVazio = () => ({
     servico: '', ddd: '', tipoPlano: '', planoAntigo: '', planoNovo: '', numeroLinha: '', sistemaOrigem: '',
     vencimentoFatura: '', valorMensalidade: 0.00, simcard3g: '', simcard4g: '', clientePossuiSimcard: false,
-    simcardDoado: false, descontoChip: '', valorChip: '', serialConfirmado: false
+    simcardDoado: false, descontoChip: '', cobrarChip: false, serialConfirmado: false
   });
 
   const formProdutoVazio = () => ({
@@ -576,7 +582,7 @@ export default function Venda() {
     }
 
     executar(async () => {
-      await enviarItem({
+      const gravado = await enviarItem({
         categoria: 'SERVICO_VIVO',
         produtoId: null,
         descricaoProduto: descricaoCompleta,
@@ -595,9 +601,14 @@ export default function Venda() {
         clientePossuiSimcard: !!servicoForm.clientePossuiSimcard,
         simcardDoado: !!servicoForm.simcardDoado,
         descontoChip: num(servicoForm.descontoChip),
-        valorChip: num(servicoForm.valorChip),
+        // Chip: preço fixo configurado no backend; qualquer valor não nulo só sinaliza que o chip é cobrado
+        valorChip: servicoForm.cobrarChip && !servicoForm.clientePossuiSimcard ? 0 : null,
         serialConfirmado: !!servicoForm.serialConfirmado
       });
+      if (gravado?.valorChip != null) {
+        setMensagemSucesso(`Serviço adicionado. Chip: ${api.formatarMoeda(gravado.valorChip)}.`);
+        setTimeout(() => setMensagemSucesso(''), 5000);
+      }
       setServicoForm(formServicoVazio());
     });
   };
@@ -658,14 +669,16 @@ export default function Venda() {
       alert('Selecione um acessório da lista de busca.');
       return;
     }
+    if (precoAcessorio.status !== 'ok') return;
     executar(async () => {
-      await enviarItem({
+      const gravado = await enviarItem({
         categoria: 'ACESSORIO',
         produtoId: acessorioSelecionado.produtoId,
         descricaoProduto: acessorioSelecionado.nome,
         quantidade: Number(qtdAcessorio) || 1,
-        valorUnitario: acessorioSelecionado.preco
+        valorUnitario: precoAcessorio.preco.preco // informativo: o backend recalcula pela tabela vigente
       });
+      avisarItemGravado(gravado, 'Acessório');
       setBuscaAcessorio('');
       setAcessorioSelecionado(null);
       setQtdAcessorio(1);
@@ -1688,13 +1701,15 @@ export default function Venda() {
                             onChange={(e) => setServicoForm((prev) => ({ ...prev, descontoChip: e.target.value }))}
                           />
 
-                          <input
-                            type="text"
-                            placeholder="0,00"
-                            style={{ ...inputStyleGlobal, width: 80, height: 32, textAlign: 'right' }}
-                            value={servicoForm.valorChip}
-                            onChange={(e) => setServicoForm((prev) => ({ ...prev, valorChip: e.target.value }))}
-                          />
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', margin: 0, fontSize: 12.5, color: 'var(--text)' }}>
+                            <input
+                              type="checkbox"
+                              checked={servicoForm.cobrarChip}
+                              onChange={(e) => setServicoForm((prev) => ({ ...prev, cobrarChip: e.target.checked }))}
+                            />
+                            <span>Cobrar chip</span>
+                            <span style={{ color: 'var(--text-faint)' }}>(valor definido pelo sistema)</span>
+                          </label>
                         </div>
                       </>
                     )}
@@ -1772,7 +1787,14 @@ export default function Venda() {
                           <td style={{ padding: '12px 16px', color: 'var(--text-faint)' }}>{item.imeiOuSerial}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'right' }}>{item.quantidade}</td>
                           <td style={{ padding: '12px 16px', textAlign: 'right' }} className="mono">
-                            <span style={{ color: 'var(--text-faint)' }}>R$ 0,00</span>
+                            {item.valorChip != null ? (
+                              <span title="Chip (preço fixo do backend)">
+                                Chip {formatadorMoeda.format(item.valorChip)}
+                                {item.descontoChip ? <span style={{ color: 'var(--text-faint)' }}> (−{formatadorMoeda.format(item.descontoChip)})</span> : null}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-faint)' }}>{formatadorMoeda.format(item.valorTotal || 0)}</span>
+                            )}
                           </td>
                           <td style={{ padding: '12px 16px', textAlign: 'right' }} className="mono">
                             <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
@@ -1841,9 +1863,6 @@ export default function Venda() {
                             <b style={{ color: 'var(--text)', fontSize: 13 }}>{ac.nome}</b>
                             <div style={{ color: 'var(--text-faint)', fontSize: 11.5 }}>SKU: {ac.sku}</div>
                           </div>
-                          <span className="mono" style={{ color: 'var(--accent)', fontWeight: 600 }}>
-                            {formatadorMoeda.format(ac.preco || 0)}
-                          </span>
                         </div>
                       ))}
                     </div>
@@ -1864,7 +1883,7 @@ export default function Venda() {
                 <button
                   type="submit"
                   className="btn solid"
-                  disabled={!acessorioSelecionado}
+                  disabled={carregando || !acessorioSelecionado || precoAcessorio.status !== 'ok'}
                   style={{
                     background: 'var(--accent, #c026d3)',
                     color: '#fff',
@@ -1873,12 +1892,19 @@ export default function Venda() {
                     padding: '0 18px',
                     borderRadius: 6,
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    opacity: carregando || !acessorioSelecionado || precoAcessorio.status !== 'ok' ? 0.5 : 1
                   }}
                 >
                   Adicionar
                 </button>
               </form>
+
+              {acessorioSelecionado && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 840 }}>
+                  <PainelPreco estado={precoAcessorio} vazio="Selecione o acessório" />
+                </div>
+              )}
 
               <div className="table-wrap" style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
