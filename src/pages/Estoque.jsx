@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, Search, RotateCcw, Download, FileBarChart, Eraser } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Search, RotateCcw, Download, FileBarChart, Eraser, Upload } from 'lucide-react';
 import { estoqueDemo, imeiDemo } from '../data/demoData';
+import { precoVigente, importarTabelaPreco, formatarData, formatarDataHora } from '../services/vendasApi';
 
 // ---------------------------------------------------------------------------
 // Utilidades
@@ -443,6 +444,157 @@ function RelatorioEstoqueTela() {
 }
 
 // ---------------------------------------------------------------------------
+// Tabela de Preços da Telefônica: vigente + importação da planilha
+// ---------------------------------------------------------------------------
+const AVISO_IMPORTACAO = 'A nova tabela passa a valer imediatamente para vendas em aberto.';
+
+function TabelaPrecosTela() {
+  const [vigente, setVigente] = useState(null);
+  const [estadoVigente, setEstadoVigente] = useState('carregando'); // carregando | ok | vazio | erro
+  const [erroVigente, setErroVigente] = useState('');
+  const [arquivo, setArquivo] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  const [erroEnvio, setErroEnvio] = useState('');
+  const [relatorio, setRelatorio] = useState(null);
+  const inputRef = useRef(null);
+
+  const carregarVigente = () => {
+    setEstadoVigente('carregando');
+    precoVigente()
+      .then((v) => { setVigente(v); setEstadoVigente(v ? 'ok' : 'vazio'); })
+      .catch((e) => { setErroVigente(e.mensagem || 'Falha ao consultar a tabela vigente.'); setEstadoVigente('erro'); });
+  };
+
+  useEffect(carregarVigente, []);
+
+  const enviar = async () => {
+    if (!arquivo) return;
+    if (!/\.xlsx$/i.test(arquivo.name)) {
+      setErroEnvio('Selecione a planilha da Telefônica no formato .xlsx.');
+      return;
+    }
+    if (!window.confirm(`${AVISO_IMPORTACAO}\n\nImportar "${arquivo.name}"?`)) return;
+    setEnviando(true);
+    setErroEnvio('');
+    setRelatorio(null);
+    try {
+      setRelatorio(await importarTabelaPreco(arquivo));
+      setArquivo(null);
+      if (inputRef.current) inputRef.current.value = '';
+      carregarVigente();
+    } catch (e) {
+      setErroEnvio(e.mensagem || 'Falha ao importar a tabela de preços.');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const caixa = { border: '1px solid var(--line)', borderRadius: 8, padding: '14px 16px', background: 'var(--panel-2)' };
+  const titulo = { fontWeight: 700, fontSize: 13.5, color: 'var(--text)', marginBottom: 8 };
+  const numeroCard = (rotulo, valor) => (
+    <div key={rotulo} style={{ ...caixa, padding: '10px 14px' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>{rotulo}</div>
+      <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{Number(valor ?? 0).toLocaleString('pt-BR')}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--accent, #c026d3)' }}>Tabela de Preços</div>
+        <div style={{ fontSize: 13, marginTop: 4 }}>
+          {estadoVigente === 'carregando' && <span style={{ color: 'var(--text-faint)' }}>Consultando a tabela vigente...</span>}
+          {estadoVigente === 'vazio' && <span style={{ color: 'var(--warn, #f59e0b)' }}>Nenhuma tabela de preços importada ainda.</span>}
+          {estadoVigente === 'erro' && <span style={{ color: 'var(--bad, #ef4444)' }}>{erroVigente}</span>}
+          {estadoVigente === 'ok' && (
+            <span style={{ color: 'var(--text-dim)' }}>
+              Vigência <b style={{ color: 'var(--text)' }}>{formatarData(vigente.vigencia)}</b>
+              {' · '}importada em <b style={{ color: 'var(--text)' }}>{formatarDataHora(vigente.importadoEm)}</b>
+              {vigente.nomeArquivo ? <span style={{ color: 'var(--text-faint)' }}> · {vigente.nomeArquivo}</span> : null}
+            </span>
+          )}
+        </div>
+        {estadoVigente === 'ok' && vigente.totais && (
+          <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 4 }}>
+            {Number(vigente.totais.precos ?? 0).toLocaleString('pt-BR')} preços · {Number(vigente.totais.planos ?? 0).toLocaleString('pt-BR')} planos
+            {' · '}{Number(vigente.totais.produtos ?? 0).toLocaleString('pt-BR')} produtos
+          </div>
+        )}
+      </div>
+
+      <div style={{ ...caixa, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={titulo}>Importar tabela da Telefônica</div>
+        <div style={{ fontSize: 12.5, color: 'var(--warn, #f59e0b)' }}>{AVISO_IMPORTACAO}</div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={(e) => { setArquivo(e.target.files?.[0] || null); setErroEnvio(''); }}
+            disabled={enviando}
+            style={{ fontSize: 13, color: 'var(--text)', maxWidth: '100%' }}
+          />
+          <button type="button" className="btn solid" onClick={enviar} disabled={!arquivo || enviando}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Upload size={14} /> {enviando ? 'Importando...' : 'Importar tabela da Telefônica'}
+          </button>
+        </div>
+        {erroEnvio && <div role="alert" style={{ color: 'var(--bad, #ef4444)', fontSize: 13, fontWeight: 600 }}>{erroEnvio}</div>}
+      </div>
+
+      {relatorio && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ color: 'var(--good, #22c55e)', fontWeight: 600, fontSize: 13.5 }}>
+            Tabela importada. Vigência {formatarData(relatorio.vigencia)}.
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+            {numeroCard('Preços lidos', relatorio.totalPrecos)}
+            {numeroCard('Planos lidos', relatorio.totalPlanos)}
+            {numeroCard('Produtos lidos', relatorio.totalProdutos)}
+            {numeroCard('Unidades do estoque atualizadas', relatorio.unidadesAtualizadas)}
+            {numeroCard('Itens da planilha sem estoque', relatorio.planilhaSemEstoque)}
+          </div>
+
+          <div style={caixa}>
+            <div style={titulo}>Linhas por aba</div>
+            {Object.keys(relatorio.linhasPorAba || {}).length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Nenhuma aba lida.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <tbody>
+                  {Object.entries(relatorio.linhasPorAba).map(([aba, qtd]) => (
+                    <tr key={aba} style={{ borderBottom: '1px solid var(--line-soft, var(--line))' }}>
+                      <td style={{ padding: '6px 0', color: 'var(--text)' }}>{aba}</td>
+                      <td className="mono" style={{ padding: '6px 0', textAlign: 'right', color: 'var(--text)' }}>{Number(qtd).toLocaleString('pt-BR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div style={caixa}>
+            <div style={titulo}>Modelos do estoque sem preço ({(relatorio.estoqueSemPreco || []).length})</div>
+            {(relatorio.estoqueSemPreco || []).length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--good, #22c55e)' }}>Todos os modelos do estoque têm preço na nova tabela.</div>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 18, maxHeight: 260, overflowY: 'auto', fontSize: 13, color: 'var(--warn, #f59e0b)' }}>
+                {relatorio.estoqueSemPreco.map((m) => <li key={m}>{m}</li>)}
+              </ul>
+            )}
+          </div>
+
+          <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+            Itens da planilha sem estoque: <b className="mono" style={{ color: 'var(--text)' }}>{Number(relatorio.planilhaSemEstoque ?? 0).toLocaleString('pt-BR')}</b>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Lista de relatórios (cards)
 // ---------------------------------------------------------------------------
 const RELATORIOS = [
@@ -450,7 +602,7 @@ const RELATORIOS = [
   { id: 'estoque', titulo: 'Estoque', descricao: 'Visualizar relatório do estoque da revenda e de suas filiais.', tela: RelatorioEstoqueTela },
   { id: 'saida-produtos', titulo: 'Saída de Produtos', descricao: 'Visualiza o relatório de produtos que saíram do estoque por outros motivos seja por devolução ou roubo.' },
   { id: 'situacao', titulo: 'Situação', descricao: 'Visualiza a situação completa de um determinado produto, desde a compra, transferência até a venda.' },
-  { id: 'tabela-precos', titulo: 'Tabela de Preços', descricao: 'Relatório dos produtos com seus respectivos valores de venda.' }
+  { id: 'tabela-precos', titulo: 'Tabela de Preços', descricao: 'Tabela de preços vigente da Telefônica e importação da nova planilha (.xlsx).', tela: TabelaPrecosTela }
 ];
 
 export default function RelatoriosEstoque() {
