@@ -1,30 +1,60 @@
-import { request } from './api';
+import { request, ApiError } from './api';
 
 // ---------------------------------------------------------------- utilitários
 /** O backend pode devolver um array simples ou uma Page ({ content: [...] }). */
 const comoLista = (r) => (Array.isArray(r) ? r : (r?.content ?? []));
 
-// Aceita número, "4230.45" (formato API) ou "R$ 4.230,45" (formato BR)
-const parseMoedaParaNumero = (valorStr) => {
-  if (valorStr === null || valorStr === undefined || valorStr === '') return 0;
-  if (typeof valorStr === 'number') return Number.isFinite(valorStr) ? valorStr : 0;
-  let s = String(valorStr).replace(/[^\d,.-]/g, '');
-  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); // formato BR
-  const n = parseFloat(s);
-  return Number.isNaN(n) ? 0 : n;
+const numeroOuNull = (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+
+// ---------------------------------------------------------------- formatação (compartilhada pelas telas)
+const moedaBR = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+export const formatarMoeda = (v) => moedaBR.format(Number(v) || 0);
+
+/** "2026-11-01" (LocalDate) -> "01/11/2026". Sem passar por Date para não deslocar o fuso. */
+export const formatarData = (iso) => {
+  if (!iso) return '—';
+  const [a, m, d] = String(iso).slice(0, 10).split('-');
+  return a && m && d ? `${d}/${m}/${a}` : String(iso);
 };
 
-// Primeiro campo de preço > 0 encontrado no objeto
-const primeiroPreco = (o = {}) => {
-  const candidatos = [
-    o.valorVenda, o.valor, o.precoVenda, o.precoBase, o.precoVarejo,
-    o.preco, o.valorUnitario, o.produto?.precoBase, o.produto?.preco,
-  ];
-  for (const c of candidatos) {
-    const n = parseMoedaParaNumero(c);
-    if (n > 0) return n;
-  }
-  return 0;
+/** Instant ISO -> "01/11/2026 14:32" no horário local. */
+export const formatarDataHora = (iso) =>
+  iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).replace(',', '') : '—';
+
+const ROTULOS_GRUPO = {
+  PRE: 'Pré',
+  CONTROLE_BTL: 'Controle BTL',
+  CONTROLE_ENTRADA: 'Controle Entrada',
+  CONTROLE_ALTO_VALOR: 'Controle Alto Valor',
+  POS_INDIVIDUAL: 'Pós Individual',
+  FAMILIA_2: 'Família 2',
+  FAMILIA_3: 'Família 3',
+  FAMILIA_4_5: 'Família 4/5',
+  VIVO_V: 'Vivo V',
+  MULTIVIVO: 'MultiVivo',
+  VIM_8GB: 'VIM 8GB',
+  VIM_14GB: 'VIM 14GB',
+  VIM_20GB: 'VIM 20GB',
+  VIM_40GB: 'VIM 40GB',
+  VIM_100GB: 'VIM 100GB',
+  SEM_PLANO: 'Sem plano',
+};
+/** Código do grupo do plano (CONTROLE_ALTO_VALOR) -> rótulo de tela (Controle Alto Valor). */
+export const rotuloGrupo = (g) => (g ? ROTULOS_GRUPO[g] || String(g).replace(/_/g, ' ') : '—');
+
+export const rotuloTabela = (t) => (t === 'RENOVA' ? 'Renova' : t === 'REGULAR' ? 'Regular' : '—');
+
+const normalizar = (txt) =>
+  String(txt ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/**
+ * Tabela da Telefônica para o serviço do item. Espelha o ResolvedorTabela do backend
+ * (RENOVA quando o serviço contém "troca" ou "renova"; REGULAR nos demais) para que o preço
+ * exibido seja o mesmo que o backend grava. Usado só na consulta de preço: na venda o backend decide.
+ */
+export const tabelaPara = (tipoServico) => {
+  const t = normalizar(tipoServico);
+  return t.includes('troca') || t.includes('renova') ? 'RENOVA' : 'REGULAR';
 };
 
 // ---------------------------------------------------------------- formas de pagamento
@@ -60,38 +90,96 @@ export async function buscarClientes(busca) {
 const buscarDisponiveis = async (busca, limite = 20) =>
   comoLista(await request('/estoque-geral/disponiveis', { params: { busca, filial: '', limite } }));
 
-const ehAcessorio = (s) =>
-  Boolean(s.codigoAcessorio) || String(s.categoria || '').toUpperCase() === 'ACESSORIO';
+/** Acessório = tem código de acessório (null, vazio e "-" não contam). Todo o resto é aparelho. */
+const temCodigoAcessorio = (s) => {
+  const c = String(s.codigoAcessorio ?? '').trim();
+  return c !== '' && c !== '-' && c !== "''";
+};
 
-/** Aparelhos (serial/IMEI disponível) com o preço vindo do estoque unificado */
+/** Aparelhos (serial/IMEI disponível). precoReferencia = valor REGULAR/PRÉ do estoque, só informativo. */
 export async function buscarAparelhos(busca) {
   const lista = await buscarDisponiveis(busca, 20);
   return lista
-    .filter((s) => !ehAcessorio(s))
+    .filter((s) => !temCodigoAcessorio(s))
     .map((s) => ({
       produtoId: s.id, // id da linha em tb_estoque_geral
-      nome: s.modeloComercial || 'Aparelho Vivo',
-      imei: s.serial,
-      preco: primeiroPreco(s),
+      nome: s.modeloComercial,
       cor: s.cor,
-      cat: 'Produto Vivo',
+      marca: s.marca,
+      imei: s.serial,
+      filial: s.filialEstoque,
+      precoReferencia: Number(s.valorVenda ?? 0),
     }))
     .filter((a) => a.imei);
 }
 
-/** Acessórios */
+/** Acessórios. O preço de venda vem de consultarPreco (grupo SEM_PLANO). */
 export async function buscarAcessorios(busca) {
   const lista = await buscarDisponiveis(busca, 30);
   return lista
-    .filter(ehAcessorio)
+    .filter(temCodigoAcessorio)
     .slice(0, 8)
     .map((s) => ({
       produtoId: s.id,
       nome: s.modeloComercial || 'Acessório',
-      sku: s.codigoAcessorio || s.serial, // acessório migrado pode não ter código: usa o serial
-      preco: primeiroPreco(s),
+      sku: s.codigoAcessorio,
+      precoReferencia: Number(s.valorVenda ?? 0),
       requerSerial: false,
     }));
+}
+
+// ---------------------------------------------------------------- tabela de preços da Telefônica
+/** Planos da tabela vigente: [{ nomePlano, grupoPlano, sistema, disponivelAlta }] */
+export async function listarPlanos(busca, disponivelAlta) {
+  return comoLista(await request('/produtos/precos/planos', { params: { busca, disponivelAlta } }));
+}
+
+/**
+ * Preço de uma unidade do estoque na tabela vigente.
+ * Sem plano = pré-pago/sem plano (o backend resolve o grupo). Sem pagamento = preço cheio.
+ * 422 (item sem preço) não lança erro: devolve { semPreco: true, mensagem }.
+ */
+export async function consultarPreco({ estoqueId, plano, tabela, pagamento, parcelas } = {}) {
+  try {
+    const r = await request('/produtos/precos/item', { params: { estoqueId, plano, tabela, pagamento, parcelas } });
+    const parcelasLista = Object.entries(r?.parcelas || {})
+      .map(([n, valor]) => ({ n: Number(n), valor: Number(valor) }))
+      .filter((p) => Number.isFinite(p.n))
+      .sort((a, b) => a.n - b.n);
+    return {
+      semPreco: false,
+      nomeComercial: r?.nomeComercial,
+      tabela: r?.tabela,
+      grupoPlano: r?.grupoPlano,
+      preco: numeroOuNull(r?.preco),
+      precoPix: numeroOuNull(r?.precoPix),
+      parcelas: parcelasLista,
+      valorAplicado: numeroOuNull(r?.valorAplicado),
+      vigencia: r?.vigencia,
+    };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 422) {
+      return { semPreco: true, mensagem: e.mensagem || 'Item sem preço na tabela vigente.' };
+    }
+    throw e;
+  }
+}
+
+/** Execução vigente: { execucaoId, vigencia, importadoEm, nomeArquivo, totais }. null se nunca houve importação (422). */
+export async function precoVigente() {
+  try {
+    return await request('/produtos/precos/vigente');
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 422 || e.status === 404)) return null;
+    throw e;
+  }
+}
+
+/** Upload da planilha (.xlsx) da Telefônica. Devolve o relatório da importação. */
+export function importarTabelaPreco(arquivo) {
+  const fd = new FormData();
+  fd.append('arquivo', arquivo);
+  return request('/produtos/precos/importar-telefonica', { method: 'POST', body: fd });
 }
 
 // ---------------------------------------------------------------- vendas
@@ -128,6 +216,10 @@ function itemParaTela(i) {
     valorUnitario: Number(i.valorUnitario),
     valorTotal: Number(i.valorTotalItem),
     mensalidadeFatura: servico ? Number(i.valorAdicional) || 0 : 0,
+    valorChip: numeroOuNull(i.valorChip),
+    descontoChip: numeroOuNull(i.descontoChip),
+    grupoPlano: i.grupoPlano || null,
+    tabelaAplicada: i.tabelaAplicada || null,
     detalhes: {
       servico: i.tipoServico,
       planoAtivo: i.plano,
@@ -155,7 +247,12 @@ function pagamentoParaTela(p) {
 export function vendaParaTela(v) {
   const itensPorCategoria = { PRODUTO_VIVO: [], SERVICO_VIVO: [], ACESSORIO: [], RECARGA: [] };
   (v.itens || []).forEach((i) => (itensPorCategoria[i.categoria] ||= []).push(itemParaTela(i)));
-  return { numero: pad(v.numeroVenda), itensPorCategoria, pagamentos: (v.pagamentos || []).map(pagamentoParaTela) };
+  return {
+    numero: pad(v.numeroVenda),
+    itensPorCategoria,
+    pagamentos: (v.pagamentos || []).map(pagamentoParaTela),
+    valorTotal: numeroOuNull(v.valorTotal), // total calculado pelo backend (não recalcular no front)
+  };
 }
 
 /** VendaResponseDTO -> linha das listagens (Vendas do dia / Buscar vendas) */
