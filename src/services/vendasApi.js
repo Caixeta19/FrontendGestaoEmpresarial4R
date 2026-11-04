@@ -44,19 +44,6 @@ export const rotuloGrupo = (g) => (g ? ROTULOS_GRUPO[g] || String(g).replace(/_/
 
 export const rotuloTabela = (t) => (t === 'RENOVA' ? 'Renova' : t === 'REGULAR' ? 'Regular' : '—');
 
-const normalizar = (txt) =>
-  String(txt ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-
-/**
- * Tabela da Telefônica para o serviço do item. Espelha o ResolvedorTabela do backend
- * (RENOVA quando o serviço contém "troca" ou "renova"; REGULAR nos demais) para que o preço
- * exibido seja o mesmo que o backend grava. Usado só na consulta de preço: na venda o backend decide.
- */
-export const tabelaPara = (tipoServico) => {
-  const t = normalizar(tipoServico);
-  return t.includes('troca') || t.includes('renova') ? 'RENOVA' : 'REGULAR';
-};
-
 // ---------------------------------------------------------------- formas de pagamento
 export const FORMA_ENUM = {
   'Cartão de Crédito': 'CARTAO_CREDITO',
@@ -136,12 +123,12 @@ export async function listarPlanos(busca, disponivelAlta) {
 
 /**
  * Preço de uma unidade do estoque na tabela vigente.
- * Sem plano = pré-pago/sem plano (o backend resolve o grupo). Sem pagamento = preço cheio.
+ * Sempre na Tabela Regular (não envia "tabela"). Sem plano = pré-pago/sem plano (o backend resolve o grupo). Sem pagamento = preço cheio.
  * 422 (item sem preço) não lança erro: devolve { semPreco: true, mensagem }.
  */
-export async function consultarPreco({ estoqueId, plano, tabela, pagamento, parcelas } = {}) {
+export async function consultarPreco({ estoqueId, plano, pagamento, parcelas } = {}) {
   try {
-    const r = await request('/produtos/precos/item', { params: { estoqueId, plano, tabela, pagamento, parcelas } });
+    const r = await request('/produtos/precos/item', { params: { estoqueId, plano, pagamento, parcelas } });
     const parcelasLista = Object.entries(r?.parcelas || {})
       .map(([n, valor]) => ({ n: Number(n), valor: Number(valor) }))
       .filter((p) => Number.isFinite(p.n))

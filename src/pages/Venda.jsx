@@ -42,18 +42,6 @@ const LISTA_DDDS = [
   '45', '46', '47', '48', '49', '55', '56', '57', '58', '59'
 ];
 
-const LISTA_PLANOS_DEMO = [
-  { nome: 'PRE PAGO - R$ 0,00', valorMensal: 0.00 },
-  { nome: 'Vivo Controle 20GB', valorMensal: 59.90 },
-  { nome: 'Vivo Controle 30GB', valorMensal: 74.90 },
-  { nome: 'Vivo Pos Individual 50GB', valorMensal: 119.90 },
-  { nome: 'Vivo Familia 2 120GB', valorMensal: 180.00 },
-  { nome: 'Vivo Fibra 500M', valorMensal: 120.00 },
-  { nome: 'Vivo Pré Turbo', valorMensal: 0.00 },
-  { nome: 'Plano Controle Legado', valorMensal: 45.00 },
-  { nome: 'Outro / Legado', valorMensal: 0.00 }
-];
-
 // Valor do combo de plano para "Sem plano / Pré-pago" (o backend resolve o grupo PRE)
 const SEM_PLANO = '__SEM_PLANO__';
 const ROTULO_SEM_PLANO = 'Sem plano / Pré-pago';
@@ -73,7 +61,7 @@ const COR_SEM_PRECO = 'var(--warn, #f59e0b)';
  * Preço de uma unidade do estoque na tabela vigente, com debounce de 300 ms.
  * status: ocioso | carregando | ok | semPreco | erro.
  */
-function usePrecoItem({ estoqueId, plano, tabela, habilitado }) {
+function usePrecoItem({ estoqueId, plano, habilitado }) {
   const [estado, setEstado] = useState({ status: 'ocioso' });
 
   useEffect(() => {
@@ -84,7 +72,7 @@ function usePrecoItem({ estoqueId, plano, tabela, habilitado }) {
     let ativo = true;
     setEstado({ status: 'carregando' });
     const t = setTimeout(() => {
-      api.consultarPreco({ estoqueId, plano, tabela })
+      api.consultarPreco({ estoqueId, plano })
         .then((r) => {
           if (!ativo) return;
           setEstado(r.semPreco ? { status: 'semPreco', mensagem: r.mensagem } : { status: 'ok', preco: r });
@@ -92,7 +80,7 @@ function usePrecoItem({ estoqueId, plano, tabela, habilitado }) {
         .catch((e) => ativo && setEstado({ status: 'erro', mensagem: e.mensagem || 'Falha ao consultar o preço.' }));
     }, 300);
     return () => { ativo = false; clearTimeout(t); };
-  }, [estoqueId, plano, tabela, habilitado]);
+  }, [estoqueId, plano, habilitado]);
 
   return estado;
 }
@@ -280,7 +268,7 @@ export default function Venda() {
     sva: 'Nao',
     seguro: 'Nao',
     segmento: '',
-    servico: 'Troca de Aparelho',
+    servico: '',
     ddd: '',
     planoAtivo: '',
     debitoAutomatico: false,
@@ -306,7 +294,7 @@ export default function Venda() {
     numeroLinha: '',
     sistemaOrigem: '',
     vencimentoFatura: '',
-    valorMensalidade: 0.00,
+    valorMensalidade: '',
     simcard3g: '',
     simcard4g: '',
     clientePossuiSimcard: false,
@@ -387,18 +375,16 @@ export default function Venda() {
     return s === 'Alta' || s === 'Reativação' || s === 'Migração' || s === 'Troca de Simcard';
   }, [servicoForm.servico]);
 
-  // Preço do aparelho na tabela vigente: precisa do aparelho e do plano (ou "Sem plano")
-  const tabelaProduto = api.tabelaPara(formProdutoVivo.servico);
   // Acessório: mesma consulta, sem plano (grupo SEM_PLANO)
   const precoAcessorio = usePrecoItem({
     estoqueId: acessorioSelecionado?.produtoId,
     habilitado: Boolean(acessorioSelecionado),
   });
 
+  // Preço do aparelho na tabela vigente (sempre Regular): precisa do aparelho e do plano (ou "Sem plano")
   const precoProduto = usePrecoItem({
     estoqueId: aparelhoSelecionado?.produtoId,
     plano: planoParaConsulta(formProdutoVivo.planoAtivo),
-    tabela: tabelaProduto,
     habilitado: Boolean(aparelhoSelecionado && formProdutoVivo.planoAtivo),
   });
 
@@ -551,12 +537,12 @@ export default function Venda() {
 
   const formServicoVazio = () => ({
     servico: '', ddd: '', tipoPlano: '', planoAntigo: '', planoNovo: '', numeroLinha: '', sistemaOrigem: '',
-    vencimentoFatura: '', valorMensalidade: 0.00, simcard3g: '', simcard4g: '', clientePossuiSimcard: false,
+    vencimentoFatura: '', valorMensalidade: '', simcard3g: '', simcard4g: '', clientePossuiSimcard: false,
     simcardDoado: false, descontoChip: '', cobrarChip: false, serialConfirmado: false
   });
 
   const formProdutoVazio = () => ({
-    sva: 'Nao', seguro: 'Nao', segmento: '', servico: 'Troca de Aparelho', ddd: '',
+    sva: 'Nao', seguro: 'Nao', segmento: '', servico: '', ddd: '',
     planoAtivo: '', debitoAutomatico: false, valor: 0, valorAdicional: '', valorAcrescimo: 0.00, desconto: '',
     cupom: false, vencimentoFatura: '', numeroLinha: '', sistemaOrigem: '', numOrdemNext: '', numSolicitacaoGed: ''
   });
@@ -576,9 +562,9 @@ export default function Venda() {
       return;
     }
 
-    let descricaoCompleta = `${servicoForm.servico}: ${servicoForm.planoNovo || 'Plano Padrão'}`;
+    let descricaoCompleta = `${servicoForm.servico}: ${rotuloPlano(servicoForm.planoNovo) || 'Plano Padrão'}`;
     if (requerPlanoAntigo) {
-      descricaoCompleta = `${servicoForm.servico}: [${rotuloPlano(servicoForm.planoAntigo)}] ➔ [${servicoForm.planoNovo || 'Plano Novo'}]`;
+      descricaoCompleta = `${servicoForm.servico}: [${rotuloPlano(servicoForm.planoAntigo)}] ➔ [${rotuloPlano(servicoForm.planoNovo) || 'Plano Novo'}]`;
     }
 
     executar(async () => {
@@ -592,8 +578,8 @@ export default function Venda() {
         ddd: servicoForm.ddd || null,
         numeroAcesso: servicoForm.numeroLinha,
         planoAntigo: planoParaVenda(servicoForm.planoAntigo),
-        plano: servicoForm.planoNovo || null,
-        valorAdicional: num(servicoForm.valorMensalidade),   // mensalidade informada na fatura
+        plano: planoParaVenda(servicoForm.planoNovo),
+        valorAdicional: num(String(servicoForm.valorMensalidade).replace(/\./g, '').replace(',', '.')),   // mensalidade informada na fatura
         vencimentoFatura: servicoForm.vencimentoFatura || null,
         sistemaOrigem: servicoForm.sistemaOrigem || null,
         simcard3g: servicoForm.simcard3g || null,
@@ -621,6 +607,10 @@ export default function Venda() {
   const handleSalvarProdutoVivo = () => {
     if (!aparelhoSelecionado) {
       alert('Por favor, informe ou selecione o Serial/IMEI do aparelho.');
+      return;
+    }
+    if (!formProdutoVivo.servico) {
+      alert('Selecione o serviço do aparelho.');
       return;
     }
     if (!formProdutoVivo.planoAtivo) {
@@ -1201,6 +1191,7 @@ export default function Venda() {
                           onChange={(e) => setFormProdutoVivo((p) => ({ ...p, servico: e.target.value }))}
                           style={{ ...inputStyleGlobal, flex: 1 }}
                         >
+                          <option value="">Escolha o serviço...</option>
                           <option value="Troca de Aparelho">Troca de Aparelho</option>
                           <option value="Aparelho Avulso / Pré">Aparelho Avulso / Pré</option>
                           <option value="Vinculado a Linha Contratada (Serviço)">Vinculado a Linha Contratada (Serviço)</option>
@@ -1234,21 +1225,6 @@ export default function Venda() {
                       </div>
                     </div>
 
-                    {/* Tabela e grupo do plano (só leitura, vindos da consulta de preço) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
-                      <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Tabela:</label>
-                      <div style={{ display: 'flex', gap: 24, alignItems: 'center', fontSize: 13, color: 'var(--text)' }}>
-                        <span>
-                          <b>{api.rotuloTabela(precoProduto.status === 'ok' ? precoProduto.preco.tabela : tabelaProduto)}</b>
-                          {precoProduto.status !== 'ok' && <span style={{ color: 'var(--text-faint)' }}> (prevista)</span>}
-                        </span>
-                        <span>
-                          <span style={{ color: 'var(--text-dim)' }}>Grupo do plano: </span>
-                          <b>{api.rotuloGrupo(precoProduto.status === 'ok' ? precoProduto.preco.grupoPlano : formProdutoVivo.planoGrupo)}</b>
-                        </span>
-                      </div>
-                    </div>
-
                     {/* Débito automático */}
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <div />
@@ -1275,6 +1251,18 @@ export default function Venda() {
                     <legend style={{ padding: '0 8px', color: 'var(--accent, #a855f7)', fontSize: 13, fontWeight: 700 }}>
                       Valores
                     </legend>
+
+                    {/* Tabela (sempre Regular) e grupo do plano — só leitura */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Tabela:</label>
+                      <div style={{ display: 'flex', gap: 24, alignItems: 'center', fontSize: 13, color: 'var(--text)', flexWrap: 'wrap' }}>
+                        <b>Tabela Regular</b>
+                        <span>
+                          <span style={{ color: 'var(--text-dim)' }}>Grupo do plano: </span>
+                          <b>{api.rotuloGrupo(precoProduto.status === 'ok' ? precoProduto.preco.grupoPlano : formProdutoVivo.planoGrupo)}</b>
+                        </span>
+                      </div>
+                    </div>
 
                     {/* Valor (tabela vigente, não editável) */}
                     <PainelPreco
@@ -1576,25 +1564,23 @@ export default function Venda() {
                       </select>
                     </div>
 
-                    <select
+                    <ComboPlano
                       value={servicoForm.planoNovo}
-                      onChange={(e) => {
-                        const sel = LISTA_PLANOS_DEMO.find((p) => p.nome === e.target.value);
-                        setServicoForm((prev) => ({ 
-                          ...prev, 
-                          planoNovo: e.target.value,
-                          valorMensalidade: sel ? sel.valorMensal : 0.00
-                        }));
-                      }}
-                      style={inputStyleGlobal}
-                    >
-                      <option value="">Escolha o plano novo...</option>
-                      {LISTA_PLANOS_DEMO.map((p) => (
-                        <option key={p.nome} value={p.nome}>
-                          {p.nome} (Fatura: {formatadorMoeda.format(p.valorMensal)}/mês)
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(valor) => setServicoForm((prev) => ({ ...prev, planoNovo: valor }))}
+                      placeholder="Escolha o plano novo..."
+                    />
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Mensalidade na fatura (R$):</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        value={servicoForm.valorMensalidade}
+                        onChange={(e) => setServicoForm((prev) => ({ ...prev, valorMensalidade: e.target.value }))}
+                        style={{ ...inputStyleGlobal, width: 110, textAlign: 'right' }}
+                      />
+                    </div>
                   </div>
                 </div>
 
