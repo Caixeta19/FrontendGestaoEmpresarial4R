@@ -775,6 +775,11 @@ export default function Venda() {
       alert('Adicione pelo menos um item ao carrinho antes de finalizar a venda.');
       return;
     }
+    if (avisoVenda) {
+      alert(avisoVenda);
+      setAbaAtiva('PAGAMENTO');
+      return;
+    }
     if (totalAPagarCaixa > 0 && saldoRestante > 0.01) {
       alert(`Existe um saldo pendente de ${formatadorMoeda.format(saldoRestante)}. Registe o pagamento na aba "Pagamento".`);
       setAbaAtiva('PAGAMENTO');
@@ -847,6 +852,16 @@ export default function Venda() {
           <button type="button" onClick={() => setErro('')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
             <X size={16} />
           </button>
+        </div>
+      )}
+
+      {avisoVenda && (
+        <div role="status" style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: 'rgba(245, 158, 11, 0.12)', border: '1px solid var(--warn, #f59e0b)',
+          color: 'var(--warn, #f59e0b)', padding: '12px 18px', borderRadius: 8, fontSize: 13.5, fontWeight: 600
+        }}>
+          <span>{avisoVenda}</span>
         </div>
       )}
 
