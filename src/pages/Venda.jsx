@@ -16,7 +16,8 @@ const OPCOES_FORMAS_PAGAMENTO = [
   'Cartão de Débito',
   'PIX',
   'Dinheiro',
-  'Boleto Bancário / Convênio'
+  'Boleto Bancário / Convênio',
+  'Voucher'
 ];
 
 const OPCOES_SERVICO = [
@@ -244,6 +245,11 @@ export default function Venda() {
   // Integração com a API
   const [vendaId, setVendaId] = useState(null);          // id da venda no backend (null = carrinho ainda não aberto)
   const [valorTotalVenda, setValorTotalVenda] = useState(null); // valorTotal devolvido pelo backend
+  const [saldoVenda, setSaldoVenda] = useState(null);           // saldo devolvido pelo backend (pode ser negativo)
+  const [avisoVenda, setAvisoVenda] = useState('');             // aviso do backend (ex.: pagamentos acima do total)
+  const [renovaAtivo, setRenovaAtivo] = useState(false);
+  const [descontoFabricante, setDescontoFabricante] = useState(null);
+  const [renovaBloqueio, setRenovaBloqueio] = useState('');     // mensagem do backend ao recusar o Renova
   const [filiais, setFiliais] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [erro, setErro] = useState('');
@@ -314,7 +320,8 @@ export default function Venda() {
   const [pgtoForm, setPgtoForm] = useState({
     forma: '',
     valor: '',
-    parcelas: '1x'
+    parcelas: '1x',
+    codigoVoucher: ''
   });
 
   // =========================================================================
@@ -334,13 +341,15 @@ export default function Venda() {
   // Total da venda calculado pelo backend (não recalcular no front)
   const totalAPagarCaixa = valorTotalVenda ?? 0;
 
-  const totalPagoAteAgora = useMemo(() => {
-    return pagamentos.reduce((acc, p) => acc + p.valor, 0);
-  }, [pagamentos]);
+  // Saldo vindo do backend (valorTotal − pagamentos); sem venda aberta, nada a pagar
+  const saldoBackend = saldoVenda ?? totalAPagarCaixa;
+  const totalPagoAteAgora = totalAPagarCaixa - saldoBackend;
+  const saldoRestante = Math.max(0, saldoBackend);
 
-  const saldoRestante = useMemo(() => {
-    return Math.max(0, totalAPagarCaixa - totalPagoAteAgora);
-  }, [totalAPagarCaixa, totalPagoAteAgora]);
+  // Renova: precisa de voucher lançado e de aparelho com preço por plano
+  const temVoucher = pagamentos.some((p) => p.formaEnum === 'VOUCHER');
+  const temAparelhoRenova = itensPorCategoria.PRODUTO_VIVO.some((i) => i.grupoPlano && i.grupoPlano !== 'SEM_PLANO');
+  useEffect(() => { setRenovaBloqueio(''); }, [itensPorCategoria]);
 
   useEffect(() => {
     if (abaAtiva === 'PAGAMENTO') {
@@ -455,6 +464,10 @@ export default function Venda() {
     setItensPorCategoria(tela.itensPorCategoria);
     setPagamentos(tela.pagamentos);
     setValorTotalVenda(tela.valorTotal);
+    setSaldoVenda(tela.saldo);
+    setAvisoVenda(tela.aviso || '');
+    setRenovaAtivo(tela.renova);
+    setDescontoFabricante(tela.descontoFabricante);
   };
 
   const carregarVendaExistente = (v) => {
@@ -468,6 +481,11 @@ export default function Venda() {
   const resetarTela = () => {
     setVendaId(null);
     setValorTotalVenda(null);
+    setSaldoVenda(null);
+    setAvisoVenda('');
+    setRenovaAtivo(false);
+    setDescontoFabricante(null);
+    setRenovaBloqueio('');
     setNumeroVenda('');
     setStatus('ABERTA');
     setCliente(null);
@@ -696,15 +714,38 @@ export default function Venda() {
       return;
     }
     const credito = pgtoForm.forma === 'Cartão de Crédito';
+    const voucher = pgtoForm.forma === 'Voucher';
+    if (voucher && !pgtoForm.codigoVoucher.trim()) {
+      alert('Informe o código do voucher.');
+      return;
+    }
     executar(async () => {
       const id = await garantirVenda();
       aplicarVenda(await api.adicionarPagamento(id, {
         forma: api.FORMA_ENUM[pgtoForm.forma],
         valor: Math.round(v * 100) / 100,
-        parcelas: credito ? parseInt(pgtoForm.parcelas, 10) || 1 : 1
+        parcelas: credito ? parseInt(pgtoForm.parcelas, 10) || 1 : 1,
+        codigoVoucher: voucher ? pgtoForm.codigoVoucher.trim() : null
       }));
-      setPgtoForm((prev) => ({ ...prev, valor: '' }));
+      setPgtoForm((prev) => ({ ...prev, valor: '', codigoVoucher: '' }));
     });
+  };
+
+  /** Liga/desliga o Renova no backend; a venda volta reprecificada (nada é calculado no front). */
+  const handleAplicarRenova = async (ativo) => {
+    if (!vendaId) return;
+    setErro('');
+    setRenovaBloqueio('');
+    setCarregando(true);
+    try {
+      aplicarVenda(await api.aplicarRenova(vendaId, ativo));
+    } catch (e) {
+      const msg = e.mensagem || e.message || 'Falha ao aplicar o Renova.';
+      if (e.status === 422) setRenovaBloqueio(msg); // ex.: "Renova não disponível para plano pré-pago."
+      else setErro(msg);
+    } finally {
+      setCarregando(false);
+    }
   };
 
   const handleRemoverPagamento = (id) => {
@@ -1969,6 +2010,20 @@ export default function Venda() {
                   </select>
                 </div>
 
+                {pgtoForm.forma === 'Voucher' && (
+                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
+                    <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Código do voucher:</label>
+                    <input
+                      type="text"
+                      maxLength={60}
+                      placeholder="Digite o código do voucher..."
+                      value={pgtoForm.codigoVoucher}
+                      onChange={(e) => setPgtoForm((prev) => ({ ...prev, codigoVoucher: e.target.value }))}
+                      style={{ ...inputStyleGlobal, maxWidth: 280 }}
+                    />
+                  </div>
+                )}
+
                 {pgtoForm.forma === 'Cartão de Crédito' && (
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                     <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Parcelamento:</label>
@@ -2015,6 +2070,57 @@ export default function Venda() {
                   </div>
                 </div>
               </form>
+
+              {/* Renova: Desconto fabricante (do backend) + Voucher (pagamento) */}
+              <fieldset style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '14px 18px', maxWidth: 840, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <legend style={{ padding: '0 8px', color: 'var(--accent, #a855f7)', fontSize: 13, fontWeight: 700 }}>Renova</legend>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16 }}>
+                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Desconto fabricante:</label>
+                  <div style={{ fontSize: 13 }}>
+                    <span className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>
+                      {renovaAtivo ? formatadorMoeda.format(descontoFabricante || 0) : '—'}
+                    </span>
+                    <span style={{ color: 'var(--text-faint)', marginLeft: 8 }}>
+                      {renovaAtivo ? '(já embutido no preço Renova dos aparelhos)' : '(preenchido pelo sistema ao aplicar o Renova)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16 }}>
+                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Voucher:</label>
+                  <span style={{ fontSize: 13, color: temVoucher ? 'var(--text)' : 'var(--text-faint)' }}>
+                    {temVoucher
+                      ? pagamentos.filter((p) => p.formaEnum === 'VOUCHER')
+                        .map((p) => `${p.codigoVoucher || 's/ código'} (${formatadorMoeda.format(p.valor)})`).join(' · ')
+                      : 'Lance o voucher acima, na forma de pagamento "Voucher".'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'start', gap: 16 }}>
+                  <div />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, margin: 0, fontSize: 13, color: 'var(--text)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={renovaAtivo}
+                        disabled={carregando || !vendaId || (!renovaAtivo && (!temVoucher || !temAparelhoRenova || Boolean(renovaBloqueio)))}
+                        onChange={(e) => handleAplicarRenova(e.target.checked)}
+                      />
+                      <b>Aplicar Renova</b>
+                    </label>
+                    {renovaBloqueio ? (
+                      <span style={{ fontSize: 12.5, color: COR_SEM_PRECO, fontWeight: 600 }}>{renovaBloqueio}</span>
+                    ) : !renovaAtivo && !temAparelhoRenova ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Adicione um aparelho com plano para usar o Renova.</span>
+                    ) : !renovaAtivo && !temVoucher ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Exige um pagamento por voucher.</span>
+                    ) : renovaAtivo ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Remover o voucher desliga o Renova e os aparelhos voltam para a Regular.</span>
+                    ) : null}
+                  </div>
+                </div>
+              </fieldset>
 
               <div className="table-wrap" style={{ overflowX: 'auto', border: '1px solid var(--line)', borderRadius: 8 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
