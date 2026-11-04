@@ -51,6 +51,7 @@ export const FORMA_ENUM = {
   'PIX': 'PIX',
   'Dinheiro': 'DINHEIRO',
   'Boleto Bancário / Convênio': 'BOLETO',
+  'Voucher': 'VOUCHER',
 };
 const FORMA_ROTULO = Object.fromEntries(Object.entries(FORMA_ENUM).map(([r, e]) => [e, r]));
 
@@ -177,6 +178,8 @@ export const adicionarItem = (id, corpo) => request(`/vendas/${id}/itens`, { met
 export const removerItem = (id, itemId) => request(`/vendas/${id}/itens/${itemId}`, { method: 'DELETE' });
 export const adicionarPagamento = (id, corpo) => request(`/vendas/${id}/pagamentos`, { method: 'POST', body: corpo });
 export const removerPagamento = (id, pgId) => request(`/vendas/${id}/pagamentos/${pgId}`, { method: 'DELETE' });
+/** Liga/desliga a TABELA RENOVA nos aparelhos (exige voucher lançado). Devolve a venda reprecificada. */
+export const aplicarRenova = (id, ativo) => request(`/vendas/${id}/renova`, { method: 'PATCH', body: { ativo } });
 export const finalizar = (id, credenciais) =>
   request(`/vendas/${id}/finalizar`, { method: 'PATCH', body: { autenticacaoVendedor: credenciais } });
 export const mudarStatus = (id, novoStatus, credenciais) =>
@@ -206,7 +209,8 @@ function itemParaTela(i) {
     valorChip: numeroOuNull(i.valorChip),
     descontoChip: numeroOuNull(i.descontoChip),
     grupoPlano: i.grupoPlano || null,
-    tabelaAplicada: i.tabelaAplicada || null,
+    tabelaAplicada: i.tabelaPrecoAplicada || i.tabelaAplicada || null,
+    descontoFabricante: numeroOuNull(i.descontoFabricante),
     detalhes: {
       servico: i.tipoServico,
       planoAtivo: i.plano,
@@ -222,11 +226,14 @@ function itemParaTela(i) {
 function pagamentoParaTela(p) {
   const parcelas = p.parcelas || 1;
   const credito = p.forma === 'CARTAO_CREDITO';
+  const voucher = p.forma === 'VOUCHER';
   return {
     id: p.id,
-    forma: `${FORMA_ROTULO[p.forma] || p.forma}${credito ? ` (${parcelas}x)` : ''}`,
+    formaEnum: p.forma,
+    forma: `${FORMA_ROTULO[p.forma] || p.forma}${credito ? ` (${parcelas}x)` : ''}${voucher && p.codigoVoucher ? ` · ${p.codigoVoucher}` : ''}`,
     detalhes: credito ? `${parcelas}x` : 'À vista',
     valor: Number(p.valor),
+    codigoVoucher: p.codigoVoucher || null,
   };
 }
 
@@ -239,6 +246,10 @@ export function vendaParaTela(v) {
     itensPorCategoria,
     pagamentos: (v.pagamentos || []).map(pagamentoParaTela),
     valorTotal: numeroOuNull(v.valorTotal), // total calculado pelo backend (não recalcular no front)
+    saldo: numeroOuNull(v.saldo),           // valorTotal − pagamentos (negativo = pagamentos acima do total)
+    aviso: v.aviso || null,
+    renova: Boolean(v.renova),
+    descontoFabricante: numeroOuNull(v.descontoFabricante),
   };
 }
 
