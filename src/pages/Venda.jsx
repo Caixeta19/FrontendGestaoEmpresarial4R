@@ -156,6 +156,23 @@ function ComboPlano({ value, onChange, placeholder, permitirSemPlano = true, des
   );
 }
 
+/** Selo da tabela aplicada pelo backend no item (Renova / Regular). */
+function SeloTabela({ tabela }) {
+  if (!tabela) return null;
+  const renova = tabela === 'RENOVA';
+  return (
+    <span style={{
+      display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+      letterSpacing: 0.2, verticalAlign: 'middle',
+      background: renova ? 'var(--accent, #a855f7)' : 'var(--panel-2, #1f1a33)',
+      color: renova ? '#fff' : 'var(--text-dim)',
+      border: renova ? '1px solid transparent' : '1px solid var(--line)'
+    }}>
+      {renova ? 'Renova' : 'Regular'}
+    </span>
+  );
+}
+
 /** Área de preço da tabela vigente: cartão/débito/dinheiro, PIX, parcelas 13x–21x e vigência. */
 function PainelPreco({ estado, vazio }) {
   const linha = { display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 };
@@ -1297,7 +1314,16 @@ export default function Venda() {
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 }}>
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Tabela:</label>
                       <div style={{ display: 'flex', gap: 24, alignItems: 'center', fontSize: 13, color: 'var(--text)', flexWrap: 'wrap' }}>
-                        <b>Tabela Regular</b>
+                        {renovaAtivo ? (
+                          <span>
+                            <SeloTabela tabela="RENOVA" />
+                            <span style={{ color: 'var(--text-faint)', marginLeft: 6 }}>
+                              Venda com Renova: o aparelho entra pela Renova ao salvar (valores abaixo são da Regular; o final aparece no carrinho).
+                            </span>
+                          </span>
+                        ) : (
+                          <b>Tabela Regular</b>
+                        )}
                         <span>
                           <span style={{ color: 'var(--text-dim)' }}>Grupo do plano: </span>
                           <b>{api.rotuloGrupo(precoProduto.status === 'ok' ? precoProduto.preco.grupoPlano : formProdutoVivo.planoGrupo)}</b>
@@ -1515,9 +1541,12 @@ export default function Venda() {
                           <td style={{ padding: '12px 16px', color: 'var(--text-faint)' }}>
                             {item.numeroLinha || '—'} {item.detalhes?.planoAtivo ? `(${item.detalhes.planoAtivo})` : ''}
                             {(item.tabelaAplicada || item.grupoPlano) && (
-                              <div style={{ fontSize: 11.5 }}>
-                                {[item.tabelaAplicada && api.rotuloTabela(item.tabelaAplicada), item.grupoPlano && api.rotuloGrupo(item.grupoPlano)]
-                                  .filter(Boolean).join(' · ')}
+                              <div style={{ fontSize: 11.5, marginTop: 4, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <SeloTabela tabela={item.tabelaAplicada} />
+                                {item.grupoPlano && <span>{api.rotuloGrupo(item.grupoPlano)}</span>}
+                                {item.descontoFabricante ? (
+                                  <span>· desc. fabricante {formatadorMoeda.format(item.descontoFabricante)}</span>
+                                ) : null}
                               </div>
                             )}
                           </td>
@@ -2096,6 +2125,21 @@ export default function Venda() {
                       : 'Lance o voucher acima, na forma de pagamento "Voucher".'}
                   </span>
                 </div>
+
+                {itensPorCategoria.PRODUTO_VIVO.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'start', gap: 16 }}>
+                    <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Aparelhos:</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+                      {itensPorCategoria.PRODUTO_VIVO.map((item) => (
+                        <div key={item.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <SeloTabela tabela={item.tabelaAplicada} />
+                          <span style={{ color: 'var(--text)' }}>{item.descricao}</span>
+                          <span className="mono" style={{ color: 'var(--good)', fontWeight: 700 }}>{formatadorMoeda.format(item.valorTotal)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'start', gap: 16 }}>
                   <div />
