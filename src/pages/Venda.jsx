@@ -11,14 +11,24 @@ const CATEGORIAS_ITENS = [
   { id: 'PAGAMENTO', rotulo: 'Pagamento' }
 ];
 
-const OPCOES_FORMAS_PAGAMENTO = [
+// Formas que cada condição aceita. O crédito do parcelado é a linha FINANCIADO, criada pelo backend.
+const FORMAS_PIX = ['PIX', 'Vivo Pay', 'Voucher'];
+const FORMAS_A_VISTA = [
   'Cartão de Crédito',
   'Cartão de Débito',
-  'PIX',
   'Dinheiro',
+  'PIX',
+  'Vivo Pay',
   'Boleto Bancário / Convênio',
   'Voucher'
 ];
+const FORMAS_ENTRADA = ['Dinheiro', 'PIX', 'Vivo Pay', 'Cartão de Débito', 'Voucher'];
+const formasDaCondicao = (condicao) => {
+  if (condicao === 'PIX') return FORMAS_PIX;
+  return api.ehParcelado(condicao) ? FORMAS_ENTRADA : FORMAS_A_VISTA;
+};
+
+const PARCELAS_CREDITO = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 const OPCOES_SERVICO = [
   'Alta',
@@ -467,6 +477,8 @@ export default function Venda() {
 
   // Condição de pagamento
   const condicaoVenda = pagtoVenda.condicaoPagamento;
+  const vendaParcelada = api.ehParcelado(condicaoVenda);
+  const formasDisponiveis = formasDaCondicao(condicaoVenda);
   const vendaEditavel = Boolean(vendaId) && status === 'ABERTA';
   const incompativeisAtuais = incompativeis.filter((p) => pagamentos.some((x) => x.id === p.id));
 
@@ -495,10 +507,18 @@ export default function Venda() {
     if (abaAtiva === 'PAGAMENTO') {
       setPgtoForm((prev) => ({
         ...prev,
-        valor: saldoRestante > 0 ? saldoRestante.toFixed(2) : ''
+        // No parcelado o campo é a entrada, que é opcional: o saldo vai para o financiamento
+        valor: !vendaParcelada && saldoRestante > 0 ? saldoRestante.toFixed(2) : ''
       }));
     }
-  }, [abaAtiva, saldoRestante]);
+  }, [abaAtiva, saldoRestante, vendaParcelada]);
+
+  // Trocou a condição: a forma escolhida pode não valer mais
+  useEffect(() => {
+    setPgtoForm((prev) => (!prev.forma || formasDaCondicao(condicaoVenda).includes(prev.forma)
+      ? prev
+      : { ...prev, forma: '' }));
+  }, [condicaoVenda]);
 
   const contagemPorCategoria = useMemo(() => {
     const mapa = { PAGAMENTO: pagamentos.length };
@@ -919,6 +939,10 @@ export default function Venda() {
   const handleParcelasParcelado = (n) => {
     setParcelasParcelado(n);
     if (api.ehParcelado(condicaoVenda)) handleEscolherCondicao(api.condicaoParcelada(n));
+  };
+
+  const handleFinanciarSaldo = () => {
+    executar(async () => aplicarVenda(await api.financiarSaldo(vendaId)));
   };
 
   const handleRemoverPagamento = (id) => {
@@ -2225,6 +2249,15 @@ export default function Venda() {
               </section>
 
               <form onSubmit={handleAdicionarPagamento} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 840 }}>
+                {vendaParcelada && (
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <h3 style={{ margin: 0, fontSize: 15, color: 'var(--text)' }}>Entrada</h3>
+                    <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>
+                      Opcional. Os juros incidem só sobre o saldo financiado.
+                    </span>
+                  </div>
+                )}
+
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                   <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Valor total:</label>
                   <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--good)' }}>
@@ -2245,7 +2278,7 @@ export default function Venda() {
                     style={inputStyleGlobal}
                   >
                     <option value="">Escolha a forma de pagamento...</option>
-                    {OPCOES_FORMAS_PAGAMENTO.map((f) => (
+                    {formasDisponiveis.map((f) => (
                       <option key={f} value={f}>{f}</option>
                     ))}
                   </select>
@@ -2273,7 +2306,7 @@ export default function Venda() {
                       onChange={(e) => setPgtoForm((prev) => ({ ...prev, parcelas: e.target.value }))}
                       style={inputStyleGlobal}
                     >
-                      {[1, 2, 3, 4, 5, 6, 10, 12, 18].map((p) => (
+                      {PARCELAS_CREDITO.map((p) => (
                         <option key={p} value={`${p}x`}>{p}x {p === 1 ? 'à vista' : 'sem juros'}</option>
                       ))}
                     </select>
@@ -2304,13 +2337,26 @@ export default function Venda() {
                         fontWeight: 700,
                         cursor: 'pointer'
                       }}
-                      disabled={totalAPagarCaixa > 0 && saldoRestante <= 0}
                     >
                       Inserir
                     </button>
                   </div>
                 </div>
               </form>
+
+              {vendaParcelada && (
+                <div>
+                  <button
+                    type="button"
+                    className="btn solid"
+                    onClick={handleFinanciarSaldo}
+                    disabled={carregando || !vendaEditavel || saldoRestante <= 0}
+                    style={{ padding: '10px 18px', fontWeight: 700 }}
+                  >
+                    Financiar saldo em {pagtoVenda.parcelasCondicao}x no cartão
+                  </button>
+                </div>
+              )}
 
               {/* Renova: Desconto fabricante (do backend) + Voucher (pagamento) */}
               <fieldset style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '14px 18px', maxWidth: 840, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -2397,7 +2443,12 @@ export default function Venda() {
                     ) : (
                       pagamentos.map((item) => (
                         <tr key={item.id} style={{ borderBottom: '1px solid var(--line)', color: 'var(--text)' }}>
-                          <td style={{ padding: '12px 16px' }}><b>{item.forma}</b></td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <b>{item.forma}</b>
+                            {item.tipo === 'ENTRADA' && (
+                              <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-faint)' }}>Entrada</span>
+                            )}
+                          </td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--good)', padding: '12px 16px' }} className="mono">
                             {formatadorMoeda.format(item.valor)}
                           </td>
