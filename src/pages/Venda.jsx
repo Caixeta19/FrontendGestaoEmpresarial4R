@@ -58,6 +58,14 @@ const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
 
 const COR_SEM_PRECO = 'var(--warn, #f59e0b)';
 
+const PAGTO_VENDA_VAZIO = {
+  condicaoPagamento: 'A_VISTA',
+  parcelasCondicao: null,
+  valorParcela: null,
+  valorItens: null,
+  ajusteCondicao: null
+};
+
 /**
  * Preço de uma unidade do estoque na tabela vigente, com debounce de 300 ms.
  * status: ocioso | carregando | ok | semPreco | erro.
@@ -173,6 +181,90 @@ function SeloTabela({ tabela }) {
   );
 }
 
+/** Um cartão de "Como o cliente vai pagar?". */
+function CartaoCondicao({ titulo, total, ativo, bloqueado, onEscolher, children }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 6, padding: '14px 16px', borderRadius: 8,
+      background: 'var(--panel-2, #181329)',
+      border: ativo ? '2px solid var(--accent, #c026d3)' : '2px solid var(--line)'
+    }}>
+      <b style={{ fontSize: 13.5, color: 'var(--text)' }}>{titulo}</b>
+      <span className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--good)' }}>
+        {total === undefined ? '—' : formatadorMoeda.format(total)}
+      </span>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5, color: 'var(--text-dim)' }}>
+        {children}
+      </div>
+      <button
+        type="button"
+        className="btn"
+        onClick={onEscolher}
+        disabled={ativo || bloqueado}
+        style={{ marginTop: 6, fontWeight: 700, cursor: ativo || bloqueado ? 'default' : 'pointer' }}
+      >
+        {ativo ? 'Selecionada' : 'Escolher'}
+      </button>
+    </div>
+  );
+}
+
+/** Topo da aba Pagamento: os valores vêm de GET /vendas/{id}/simulacao-pagamento. */
+function CartoesCondicao({ simulacao, condicao, parcelas, bloqueado, onEscolher, onParcelas }) {
+  const buscar = (c) => simulacao.find((s) => s.condicao === c);
+  const pix = buscar('PIX');
+  const aVista = buscar('A_VISTA');
+  const condicaoParcelada = api.condicaoParcelada(parcelas);
+  const parcelado = buscar(condicaoParcelada);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+      <CartaoCondicao
+        titulo="PIX / Vivo Pay"
+        total={pix?.total}
+        ativo={condicao === 'PIX'}
+        bloqueado={bloqueado}
+        onEscolher={() => onEscolher('PIX')}
+      >
+        {pix && <span>Economia de {formatadorMoeda.format(Math.abs(pix.economiaOuJuros))}</span>}
+      </CartaoCondicao>
+
+      <CartaoCondicao
+        titulo="À vista ou até 12x"
+        total={aVista?.total}
+        ativo={condicao === 'A_VISTA'}
+        bloqueado={bloqueado}
+        onEscolher={() => onEscolher('A_VISTA')}
+      >
+        {aVista && <span>{aVista.parcelas}x de {formatadorMoeda.format(aVista.valorParcela)} sem juros</span>}
+      </CartaoCondicao>
+
+      <CartaoCondicao
+        titulo="Parcelado"
+        total={parcelado?.total}
+        ativo={condicao === condicaoParcelada}
+        bloqueado={bloqueado}
+        onEscolher={() => onEscolher(condicaoParcelada)}
+      >
+        <select
+          aria-label="Número de parcelas"
+          value={parcelas}
+          disabled={bloqueado}
+          onChange={(e) => onParcelas(Number(e.target.value))}
+          style={{ ...inputStyleGlobal, padding: '4px 8px' }}
+        >
+          {api.PARCELAS_FINANCIADAS.map((n) => <option key={n} value={n}>{n}x</option>)}
+        </select>
+        {parcelado && (
+          <>
+            <span>{parcelado.parcelas}x de {formatadorMoeda.format(parcelado.valorParcela)}</span>
+            <span>Juros de {formatadorMoeda.format(parcelado.economiaOuJuros)}</span>
+          </>
+        )}
+      </CartaoCondicao>
+    </div>
+  );
+}
+
 /** Área de preço da tabela vigente: cartão/débito/dinheiro, PIX, parcelas 13x–21x e vigência. */
 function PainelPreco({ estado, vazio }) {
   const linha = { display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 };
@@ -267,6 +359,11 @@ export default function Venda() {
   const [renovaAtivo, setRenovaAtivo] = useState(false);
   const [descontoFabricante, setDescontoFabricante] = useState(null);
   const [renovaBloqueio, setRenovaBloqueio] = useState('');     // mensagem do backend ao recusar o Renova
+  const [pagtoVenda, setPagtoVenda] = useState(PAGTO_VENDA_VAZIO); // condição e valores devolvidos pelo backend
+  const [parcelasParcelado, setParcelasParcelado] = useState(api.PARCELAS_FINANCIADAS[0]); // seletor 13x–21x
+  const [simulacao, setSimulacao] = useState([]);
+  const [simulacaoErro, setSimulacaoErro] = useState('');
+  const [incompativeis, setIncompativeis] = useState([]);       // pagamentos recusados na troca de condição (422)
   const [filiais, setFiliais] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [erro, setErro] = useState('');
@@ -367,6 +464,32 @@ export default function Venda() {
   const temVoucher = pagamentos.some((p) => p.formaEnum === 'VOUCHER');
   const temAparelhoRenova = itensPorCategoria.PRODUTO_VIVO.some((i) => i.grupoPlano && i.grupoPlano !== 'SEM_PLANO');
   useEffect(() => { setRenovaBloqueio(''); }, [itensPorCategoria]);
+
+  // Condição de pagamento
+  const condicaoVenda = pagtoVenda.condicaoPagamento;
+  const vendaEditavel = Boolean(vendaId) && status === 'ABERTA';
+  const incompativeisAtuais = incompativeis.filter((p) => pagamentos.some((x) => x.id === p.id));
+
+  // A simulação depende dos itens, das entradas e do Renova: recarrega sempre que a venda volta do backend
+  useEffect(() => {
+    if (!vendaId) {
+      setSimulacao([]);
+      setSimulacaoErro('');
+      return undefined;
+    }
+    if (abaAtiva !== 'PAGAMENTO') return undefined;
+    let atual = true;
+    api.simularPagamento(vendaId)
+      .then((lista) => {
+        if (!atual) return;
+        setSimulacao(lista);
+        setSimulacaoErro('');
+      })
+      .catch((e) => {
+        if (atual) setSimulacaoErro(e.mensagem || 'Falha ao simular o pagamento.');
+      });
+    return () => { atual = false; };
+  }, [abaAtiva, vendaId, itensPorCategoria, pagamentos, renovaAtivo]);
 
   useEffect(() => {
     if (abaAtiva === 'PAGAMENTO') {
@@ -485,6 +608,14 @@ export default function Venda() {
     setAvisoVenda(tela.aviso || '');
     setRenovaAtivo(tela.renova);
     setDescontoFabricante(tela.descontoFabricante);
+    setPagtoVenda({
+      condicaoPagamento: tela.condicaoPagamento,
+      parcelasCondicao: tela.parcelasCondicao,
+      valorParcela: tela.valorParcela,
+      valorItens: tela.valorItens,
+      ajusteCondicao: tela.ajusteCondicao
+    });
+    if (api.ehParcelado(tela.condicaoPagamento)) setParcelasParcelado(tela.parcelasCondicao);
   };
 
   const carregarVendaExistente = (v) => {
@@ -503,6 +634,9 @@ export default function Venda() {
     setRenovaAtivo(false);
     setDescontoFabricante(null);
     setRenovaBloqueio('');
+    setPagtoVenda(PAGTO_VENDA_VAZIO);
+    setParcelasParcelado(api.PARCELAS_FINANCIADAS[0]);
+    setIncompativeis([]);
     setNumeroVenda('');
     setStatus('ABERTA');
     setCliente(null);
@@ -763,6 +897,28 @@ export default function Venda() {
     } finally {
       setCarregando(false);
     }
+  };
+
+  /** Troca a condição no backend; 422 traz os pagamentos que a condição não aceita. */
+  const handleEscolherCondicao = async (condicao) => {
+    setErro('');
+    setIncompativeis([]);
+    setCarregando(true);
+    try {
+      aplicarVenda(await api.alterarCondicao(vendaId, condicao));
+    } catch (e) {
+      const lista = e.corpo?.pagamentosIncompativeis;
+      if (e.status === 422 && lista?.length) setIncompativeis(lista.map(api.pagamentoParaTela));
+      else setErro(e.mensagem || e.message || 'Falha ao alterar a condição de pagamento.');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  /** Fora do parcelado, o seletor só mostra os valores; dentro dele, já troca o número de parcelas. */
+  const handleParcelasParcelado = (n) => {
+    setParcelasParcelado(n);
+    if (api.ehParcelado(condicaoVenda)) handleEscolherCondicao(api.condicaoParcelada(n));
   };
 
   const handleRemoverPagamento = (id) => {
@@ -2027,6 +2183,47 @@ export default function Venda() {
           {/* ================= 5. PAGAMENTO ================= */}
           {abaAtiva === 'PAGAMENTO' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <section style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 840 }}>
+                <h3 style={{ margin: 0, fontSize: 15, color: 'var(--text)' }}>Como o cliente vai pagar?</h3>
+                {!vendaId ? (
+                  <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>
+                    Adicione um item ao carrinho para ver as condições de pagamento.
+                  </span>
+                ) : (
+                  <CartoesCondicao
+                    simulacao={simulacao}
+                    condicao={condicaoVenda}
+                    parcelas={parcelasParcelado}
+                    bloqueado={carregando || !vendaEditavel}
+                    onEscolher={handleEscolherCondicao}
+                    onParcelas={handleParcelasParcelado}
+                  />
+                )}
+                {simulacaoErro && (
+                  <span style={{ fontSize: 12.5, color: COR_SEM_PRECO, fontWeight: 600 }}>{simulacaoErro}</span>
+                )}
+                {incompativeisAtuais.length > 0 && (
+                  <div role="alert" style={{ border: `1px solid ${COR_SEM_PRECO}`, borderRadius: 8, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+                    <b style={{ color: 'var(--text)' }}>Remova estes pagamentos para trocar a condição:</b>
+                    {incompativeisAtuais.map((p) => (
+                      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text)' }}>
+                        <span>{p.forma}</span>
+                        <span className="mono" style={{ fontWeight: 700 }}>{formatadorMoeda.format(p.valor)}</span>
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={carregando}
+                          onClick={() => handleRemoverPagamento(p.id)}
+                          style={{ marginLeft: 'auto', color: 'var(--bad)' }}
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
               <form onSubmit={handleAdicionarPagamento} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 840 }}>
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                   <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Valor total:</label>
