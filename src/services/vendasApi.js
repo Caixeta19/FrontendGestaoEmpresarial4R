@@ -49,11 +49,17 @@ export const FORMA_ENUM = {
   'Cartão de Crédito': 'CARTAO_CREDITO',
   'Cartão de Débito': 'CARTAO_DEBITO',
   'PIX': 'PIX',
+  'Vivo Pay': 'VIVO_PAY',
   'Dinheiro': 'DINHEIRO',
   'Boleto Bancário / Convênio': 'BOLETO',
   'Voucher': 'VOUCHER',
 };
 const FORMA_ROTULO = Object.fromEntries(Object.entries(FORMA_ENUM).map(([r, e]) => [e, r]));
+
+// ---------------------------------------------------------------- condição de pagamento
+export const PARCELAS_FINANCIADAS = [13, 14, 15, 16, 17, 18, 19, 20, 21];
+export const condicaoParcelada = (n) => `PARCELADO_${n}`;
+export const ehParcelado = (condicao) => String(condicao || '').startsWith('PARCELADO_');
 
 const pad = (n) => String(n ?? '').padStart(6, '0');
 const dataHora = (iso) =>
@@ -180,6 +186,22 @@ export const adicionarPagamento = (id, corpo) => request(`/vendas/${id}/pagament
 export const removerPagamento = (id, pgId) => request(`/vendas/${id}/pagamentos/${pgId}`, { method: 'DELETE' });
 /** Liga/desliga a TABELA RENOVA nos aparelhos (exige voucher lançado). Devolve a venda reprecificada. */
 export const aplicarRenova = (id, ativo) => request(`/vendas/${id}/renova`, { method: 'PATCH', body: { ativo } });
+/** Troca a condição e devolve a venda reprecificada. 422 traz pagamentosIncompativeis em ApiError.corpo. */
+export const alterarCondicao = (id, condicao) =>
+  request(`/vendas/${id}/condicao-pagamento`, { method: 'PATCH', body: { condicao } });
+/** Em PARCELADO_N, cria ou atualiza a linha FINANCIADO com o saldo. */
+export const financiarSaldo = (id) => request(`/vendas/${id}/financiar`, { method: 'POST' });
+/** Todas as condições com as entradas já lançadas. economiaOuJuros: negativo = desconto PIX, positivo = juros. */
+export async function simularPagamento(id) {
+  const lista = await request(`/vendas/${id}/simulacao-pagamento`);
+  return (lista || []).map((s) => ({
+    condicao: s.condicao,
+    total: Number(s.total),
+    parcelas: Number(s.parcelas),
+    valorParcela: Number(s.valorParcela),
+    economiaOuJuros: Number(s.economiaOuJuros),
+  }));
+}
 export const finalizar = (id, credenciais) =>
   request(`/vendas/${id}/finalizar`, { method: 'PATCH', body: { autenticacaoVendedor: credenciais } });
 export const mudarStatus = (id, novoStatus, credenciais) =>
@@ -223,14 +245,16 @@ function itemParaTela(i) {
   };
 }
 
-function pagamentoParaTela(p) {
+export function pagamentoParaTela(p) {
   const parcelas = p.parcelas || 1;
   const credito = p.forma === 'CARTAO_CREDITO';
   const voucher = p.forma === 'VOUCHER';
+  const rotulo = p.tipo === 'FINANCIADO' ? 'Financiado no cartão' : FORMA_ROTULO[p.forma] || p.forma;
   return {
     id: p.id,
     formaEnum: p.forma,
-    forma: `${FORMA_ROTULO[p.forma] || p.forma}${credito ? ` (${parcelas}x)` : ''}${voucher && p.codigoVoucher ? ` · ${p.codigoVoucher}` : ''}`,
+    tipo: p.tipo || 'PAGAMENTO',
+    forma: `${rotulo}${credito ? ` (${parcelas}x)` : ''}${voucher && p.codigoVoucher ? ` · ${p.codigoVoucher}` : ''}`,
     detalhes: credito ? `${parcelas}x` : 'À vista',
     valor: Number(p.valor),
     codigoVoucher: p.codigoVoucher || null,
@@ -250,6 +274,11 @@ export function vendaParaTela(v) {
     aviso: v.aviso || null,
     renova: Boolean(v.renova),
     descontoFabricante: numeroOuNull(v.descontoFabricante),
+    condicaoPagamento: v.condicaoPagamento || 'A_VISTA',
+    parcelasCondicao: numeroOuNull(v.parcelasCondicao),
+    valorParcela: numeroOuNull(v.valorParcela), // financiado ÷ N no parcelado; total ÷ parcelas nas demais
+    valorItens: numeroOuNull(v.valorItens),     // preço cheio, sem juros nem desconto PIX
+    ajusteCondicao: numeroOuNull(v.ajusteCondicao), // valorTotal − valorItens: negativo = desconto PIX, positivo = juros
   };
 }
 

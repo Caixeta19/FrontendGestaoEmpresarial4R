@@ -2,11 +2,12 @@
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
 export class ApiError extends Error {
-  constructor(status, mensagem, campos) {
+  constructor(status, mensagem, campos, corpo) {
     super(mensagem);
     this.status = status;
     this.mensagem = mensagem;
     this.campos = campos || null;
+    this.corpo = corpo || null; // corpo do erro, para dados além da mensagem (ex.: pagamentosIncompativeis)
   }
 }
 
@@ -75,7 +76,7 @@ export async function request(path, { method = 'GET', body, params } = {}) {
       else if (resp.status === 403) mensagem = 'Você não tem permissão para esta operação.';
       else mensagem = `Erro ${resp.status}`;
     }
-    throw new ApiError(resp.status, mensagem, dados?.campos);
+    throw new ApiError(resp.status, mensagem, dados?.campos, dados);
   }
   return dados;
 }
