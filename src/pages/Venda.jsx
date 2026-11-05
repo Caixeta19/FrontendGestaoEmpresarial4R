@@ -11,14 +11,24 @@ const CATEGORIAS_ITENS = [
   { id: 'PAGAMENTO', rotulo: 'Pagamento' }
 ];
 
-const OPCOES_FORMAS_PAGAMENTO = [
+// Formas que cada condição aceita. O crédito do parcelado é a linha FINANCIADO, criada pelo backend.
+const FORMAS_PIX = ['PIX', 'Vivo Pay', 'Voucher'];
+const FORMAS_A_VISTA = [
   'Cartão de Crédito',
   'Cartão de Débito',
-  'PIX',
   'Dinheiro',
+  'PIX',
+  'Vivo Pay',
   'Boleto Bancário / Convênio',
   'Voucher'
 ];
+const FORMAS_ENTRADA = ['Dinheiro', 'PIX', 'Vivo Pay', 'Cartão de Débito', 'Voucher'];
+const formasDaCondicao = (condicao) => {
+  if (condicao === 'PIX') return FORMAS_PIX;
+  return api.ehParcelado(condicao) ? FORMAS_ENTRADA : FORMAS_A_VISTA;
+};
+
+const PARCELAS_CREDITO = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 const OPCOES_SERVICO = [
   'Alta',
@@ -57,6 +67,14 @@ const formatadorMoeda = new Intl.NumberFormat('pt-BR', {
 });
 
 const COR_SEM_PRECO = 'var(--warn, #f59e0b)';
+
+const PAGTO_VENDA_VAZIO = {
+  condicaoPagamento: 'A_VISTA',
+  parcelasCondicao: null,
+  valorParcela: null,
+  valorItens: null,
+  ajusteCondicao: null
+};
 
 /**
  * Preço de uma unidade do estoque na tabela vigente, com debounce de 300 ms.
@@ -173,6 +191,117 @@ function SeloTabela({ tabela }) {
   );
 }
 
+/** Um cartão de "Como o cliente vai pagar?". */
+function CartaoCondicao({ titulo, total, ativo, bloqueado, onEscolher, children }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 6, padding: '14px 16px', borderRadius: 8,
+      background: 'var(--panel-2, #181329)',
+      border: ativo ? '2px solid var(--accent, #c026d3)' : '2px solid var(--line)'
+    }}>
+      <b style={{ fontSize: 13.5, color: 'var(--text)' }}>{titulo}</b>
+      <span className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--good)' }}>
+        {total === undefined ? '—' : formatadorMoeda.format(total)}
+      </span>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5, color: 'var(--text-dim)' }}>
+        {children}
+      </div>
+      <button
+        type="button"
+        className="btn"
+        onClick={onEscolher}
+        disabled={ativo || bloqueado}
+        style={{ marginTop: 6, fontWeight: 700, cursor: ativo || bloqueado ? 'default' : 'pointer' }}
+      >
+        {ativo ? 'Selecionada' : 'Escolher'}
+      </button>
+    </div>
+  );
+}
+
+/** Topo da aba Pagamento: os valores vêm de GET /vendas/{id}/simulacao-pagamento. */
+function CartoesCondicao({ simulacao, condicao, parcelas, bloqueado, onEscolher, onParcelas }) {
+  const buscar = (c) => simulacao.find((s) => s.condicao === c);
+  const pix = buscar('PIX');
+  const aVista = buscar('A_VISTA');
+  const condicaoParcelada = api.condicaoParcelada(parcelas);
+  const parcelado = buscar(condicaoParcelada);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+      <CartaoCondicao
+        titulo="PIX / Vivo Pay"
+        total={pix?.total}
+        ativo={condicao === 'PIX'}
+        bloqueado={bloqueado}
+        onEscolher={() => onEscolher('PIX')}
+      >
+        {pix && <span>Economia de {formatadorMoeda.format(Math.abs(pix.economiaOuJuros))}</span>}
+      </CartaoCondicao>
+
+      <CartaoCondicao
+        titulo="À vista ou até 12x"
+        total={aVista?.total}
+        ativo={condicao === 'A_VISTA'}
+        bloqueado={bloqueado}
+        onEscolher={() => onEscolher('A_VISTA')}
+      >
+        {aVista && <span>{aVista.parcelas}x de {formatadorMoeda.format(aVista.valorParcela)} sem juros</span>}
+      </CartaoCondicao>
+
+      <CartaoCondicao
+        titulo="Parcelado"
+        total={parcelado?.total}
+        ativo={condicao === condicaoParcelada}
+        bloqueado={bloqueado}
+        onEscolher={() => onEscolher(condicaoParcelada)}
+      >
+        <select
+          aria-label="Número de parcelas"
+          value={parcelas}
+          disabled={bloqueado}
+          onChange={(e) => onParcelas(Number(e.target.value))}
+          style={{ ...inputStyleGlobal, padding: '4px 8px' }}
+        >
+          {api.PARCELAS_FINANCIADAS.map((n) => <option key={n} value={n}>{n}x</option>)}
+        </select>
+        {parcelado && (
+          <>
+            <span>{parcelado.parcelas}x de {formatadorMoeda.format(parcelado.valorParcela)}</span>
+            <span>Juros de {formatadorMoeda.format(parcelado.economiaOuJuros)}</span>
+          </>
+        )}
+      </CartaoCondicao>
+    </div>
+  );
+}
+
+/** Resumo da aba Pagamento: só exibe o que o backend devolveu. */
+function ResumoPagamento({ pagto, total, pago, saldo, renova, descontoFabricante }) {
+  const ajuste = pagto.ajusteCondicao || 0;
+  const linha = (rotulo, valor, destaque) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: destaque ? 14.5 : 13 }}>
+      <span style={{ color: destaque ? 'var(--text)' : 'var(--text-dim)', fontWeight: destaque ? 700 : 500 }}>{rotulo}</span>
+      <span className="mono" style={{ color: 'var(--text)', fontWeight: destaque ? 700 : 600 }}>{formatadorMoeda.format(valor || 0)}</span>
+    </div>
+  );
+  return (
+    <fieldset style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '14px 18px', maxWidth: 840, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <legend style={{ padding: '0 8px', color: 'var(--accent, #a855f7)', fontSize: 13, fontWeight: 700 }}>Resumo do pagamento</legend>
+      {linha('Itens (preço cheio)', pagto.valorItens)}
+      {ajuste !== 0 && linha(ajuste < 0 ? 'Desconto PIX' : 'Juros', ajuste)}
+      {renova && linha('Desconto fabricante (Renova, informativo)', descontoFabricante)}
+      {linha('Total', total, true)}
+      {linha('Pago', pago)}
+      {linha('Saldo', saldo, true)}
+      {api.ehParcelado(pagto.condicaoPagamento) && (
+        <div className="mono" style={{ textAlign: 'right', fontSize: 13, color: 'var(--text-dim)' }}>
+          {pagto.parcelasCondicao} × {formatadorMoeda.format(pagto.valorParcela || 0)}
+        </div>
+      )}
+    </fieldset>
+  );
+}
+
 /** Área de preço da tabela vigente: cartão/débito/dinheiro, PIX, parcelas 13x–21x e vigência. */
 function PainelPreco({ estado, vazio }) {
   const linha = { display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 };
@@ -267,6 +396,11 @@ export default function Venda() {
   const [renovaAtivo, setRenovaAtivo] = useState(false);
   const [descontoFabricante, setDescontoFabricante] = useState(null);
   const [renovaBloqueio, setRenovaBloqueio] = useState('');     // mensagem do backend ao recusar o Renova
+  const [pagtoVenda, setPagtoVenda] = useState(PAGTO_VENDA_VAZIO); // condição e valores devolvidos pelo backend
+  const [parcelasParcelado, setParcelasParcelado] = useState(api.PARCELAS_FINANCIADAS[0]); // seletor 13x–21x
+  const [simulacao, setSimulacao] = useState([]);
+  const [simulacaoErro, setSimulacaoErro] = useState('');
+  const [incompativeis, setIncompativeis] = useState([]);       // pagamentos recusados na troca de condição (422)
   const [filiais, setFiliais] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [erro, setErro] = useState('');
@@ -368,14 +502,50 @@ export default function Venda() {
   const temAparelhoRenova = itensPorCategoria.PRODUTO_VIVO.some((i) => i.grupoPlano && i.grupoPlano !== 'SEM_PLANO');
   useEffect(() => { setRenovaBloqueio(''); }, [itensPorCategoria]);
 
+  // Condição de pagamento
+  const condicaoVenda = pagtoVenda.condicaoPagamento;
+  const vendaParcelada = api.ehParcelado(condicaoVenda);
+  const formasDisponiveis = formasDaCondicao(condicaoVenda);
+  const vendaEditavel = Boolean(vendaId) && status === 'ABERTA';
+  const incompativeisAtuais = incompativeis.filter((p) => pagamentos.some((x) => x.id === p.id));
+
+  // A simulação depende dos itens, das entradas e do Renova: recarrega sempre que a venda volta do backend
+  useEffect(() => {
+    if (!vendaId) {
+      setSimulacao([]);
+      setSimulacaoErro('');
+      return undefined;
+    }
+    if (abaAtiva !== 'PAGAMENTO') return undefined;
+    let atual = true;
+    api.simularPagamento(vendaId)
+      .then((lista) => {
+        if (!atual) return;
+        setSimulacao(lista);
+        setSimulacaoErro('');
+      })
+      .catch((e) => {
+        if (atual) setSimulacaoErro(e.mensagem || 'Falha ao simular o pagamento.');
+      });
+    return () => { atual = false; };
+  }, [abaAtiva, vendaId, itensPorCategoria, pagamentos, renovaAtivo]);
+
   useEffect(() => {
     if (abaAtiva === 'PAGAMENTO') {
       setPgtoForm((prev) => ({
         ...prev,
-        valor: saldoRestante > 0 ? saldoRestante.toFixed(2) : ''
+        // No parcelado o campo é a entrada, que é opcional: o saldo vai para o financiamento
+        valor: !vendaParcelada && saldoRestante > 0 ? saldoRestante.toFixed(2) : ''
       }));
     }
-  }, [abaAtiva, saldoRestante]);
+  }, [abaAtiva, saldoRestante, vendaParcelada]);
+
+  // Trocou a condição: a forma escolhida pode não valer mais
+  useEffect(() => {
+    setPgtoForm((prev) => (!prev.forma || formasDaCondicao(condicaoVenda).includes(prev.forma)
+      ? prev
+      : { ...prev, forma: '' }));
+  }, [condicaoVenda]);
 
   const contagemPorCategoria = useMemo(() => {
     const mapa = { PAGAMENTO: pagamentos.length };
@@ -485,6 +655,14 @@ export default function Venda() {
     setAvisoVenda(tela.aviso || '');
     setRenovaAtivo(tela.renova);
     setDescontoFabricante(tela.descontoFabricante);
+    setPagtoVenda({
+      condicaoPagamento: tela.condicaoPagamento,
+      parcelasCondicao: tela.parcelasCondicao,
+      valorParcela: tela.valorParcela,
+      valorItens: tela.valorItens,
+      ajusteCondicao: tela.ajusteCondicao
+    });
+    if (api.ehParcelado(tela.condicaoPagamento)) setParcelasParcelado(tela.parcelasCondicao);
   };
 
   const carregarVendaExistente = (v) => {
@@ -503,6 +681,9 @@ export default function Venda() {
     setRenovaAtivo(false);
     setDescontoFabricante(null);
     setRenovaBloqueio('');
+    setPagtoVenda(PAGTO_VENDA_VAZIO);
+    setParcelasParcelado(api.PARCELAS_FINANCIADAS[0]);
+    setIncompativeis([]);
     setNumeroVenda('');
     setStatus('ABERTA');
     setCliente(null);
@@ -722,14 +903,6 @@ export default function Venda() {
       alert('Selecione a forma de pagamento.');
       return;
     }
-    if (!v || v <= 0) {
-      alert('Introduza um valor de pagamento válido.');
-      return;
-    }
-    if (totalAPagarCaixa > 0 && v > saldoRestante + 0.01) {
-      alert(`O valor indicado (${formatadorMoeda.format(v)}) excede o saldo restante (${formatadorMoeda.format(saldoRestante)}).`);
-      return;
-    }
     const credito = pgtoForm.forma === 'Cartão de Crédito';
     const voucher = pgtoForm.forma === 'Voucher';
     if (voucher && !pgtoForm.codigoVoucher.trim()) {
@@ -765,6 +938,32 @@ export default function Venda() {
     }
   };
 
+  /** Troca a condição no backend; 422 traz os pagamentos que a condição não aceita. */
+  const handleEscolherCondicao = async (condicao) => {
+    setErro('');
+    setIncompativeis([]);
+    setCarregando(true);
+    try {
+      aplicarVenda(await api.alterarCondicao(vendaId, condicao));
+    } catch (e) {
+      const lista = e.corpo?.pagamentosIncompativeis;
+      if (e.status === 422 && lista?.length) setIncompativeis(lista.map(api.pagamentoParaTela));
+      else setErro(e.mensagem || e.message || 'Falha ao alterar a condição de pagamento.');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  /** Fora do parcelado, o seletor só mostra os valores; dentro dele, já troca o número de parcelas. */
+  const handleParcelasParcelado = (n) => {
+    setParcelasParcelado(n);
+    if (api.ehParcelado(condicaoVenda)) handleEscolherCondicao(api.condicaoParcelada(n));
+  };
+
+  const handleFinanciarSaldo = () => {
+    executar(async () => aplicarVenda(await api.financiarSaldo(vendaId)));
+  };
+
   const handleRemoverPagamento = (id) => {
     if (!vendaId) return;
     executar(async () => aplicarVenda(await api.removerPagamento(vendaId, id)));
@@ -777,11 +976,6 @@ export default function Venda() {
     }
     if (avisoVenda) {
       alert(avisoVenda);
-      setAbaAtiva('PAGAMENTO');
-      return;
-    }
-    if (totalAPagarCaixa > 0 && saldoRestante > 0.01) {
-      alert(`Existe um saldo pendente de ${formatadorMoeda.format(saldoRestante)}. Registe o pagamento na aba "Pagamento".`);
       setAbaAtiva('PAGAMENTO');
       return;
     }
@@ -2027,18 +2221,56 @@ export default function Venda() {
           {/* ================= 5. PAGAMENTO ================= */}
           {abaAtiva === 'PAGAMENTO' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <form onSubmit={handleAdicionarPagamento} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 840 }}>
-                <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Valor total:</label>
-                  <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--good)' }}>
-                    {formatadorMoeda.format(totalAPagarCaixa)}
-                    {totalPagoAteAgora > 0 && (
-                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-faint)', marginLeft: 10 }}>
-                        (Restante: {formatadorMoeda.format(saldoRestante)})
-                      </span>
-                    )}
+              <section style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 840 }}>
+                <h3 style={{ margin: 0, fontSize: 15, color: 'var(--text)' }}>Como o cliente vai pagar?</h3>
+                {!vendaId ? (
+                  <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>
+                    Adicione um item ao carrinho para ver as condições de pagamento.
+                  </span>
+                ) : (
+                  <CartoesCondicao
+                    simulacao={simulacao}
+                    condicao={condicaoVenda}
+                    parcelas={parcelasParcelado}
+                    bloqueado={carregando || !vendaEditavel}
+                    onEscolher={handleEscolherCondicao}
+                    onParcelas={handleParcelasParcelado}
+                  />
+                )}
+                {simulacaoErro && (
+                  <span style={{ fontSize: 12.5, color: COR_SEM_PRECO, fontWeight: 600 }}>{simulacaoErro}</span>
+                )}
+                {incompativeisAtuais.length > 0 && (
+                  <div role="alert" style={{ border: `1px solid ${COR_SEM_PRECO}`, borderRadius: 8, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+                    <b style={{ color: 'var(--text)' }}>Remova estes pagamentos para trocar a condição:</b>
+                    {incompativeisAtuais.map((p) => (
+                      <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text)' }}>
+                        <span>{p.forma}</span>
+                        <span className="mono" style={{ fontWeight: 700 }}>{formatadorMoeda.format(p.valor)}</span>
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={carregando}
+                          onClick={() => handleRemoverPagamento(p.id)}
+                          style={{ marginLeft: 'auto', color: 'var(--bad)' }}
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                </div>
+                )}
+              </section>
+
+              <form onSubmit={handleAdicionarPagamento} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 840 }}>
+                {vendaParcelada && (
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <h3 style={{ margin: 0, fontSize: 15, color: 'var(--text)' }}>Entrada</h3>
+                    <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>
+                      Opcional. Os juros incidem só sobre o saldo financiado.
+                    </span>
+                  </div>
+                )}
 
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                   <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Forma de pagamento:</label>
@@ -2048,7 +2280,7 @@ export default function Venda() {
                     style={inputStyleGlobal}
                   >
                     <option value="">Escolha a forma de pagamento...</option>
-                    {OPCOES_FORMAS_PAGAMENTO.map((f) => (
+                    {formasDisponiveis.map((f) => (
                       <option key={f} value={f}>{f}</option>
                     ))}
                   </select>
@@ -2076,7 +2308,7 @@ export default function Venda() {
                       onChange={(e) => setPgtoForm((prev) => ({ ...prev, parcelas: e.target.value }))}
                       style={inputStyleGlobal}
                     >
-                      {[1, 2, 3, 4, 5, 6, 10, 12, 18].map((p) => (
+                      {PARCELAS_CREDITO.map((p) => (
                         <option key={p} value={`${p}x`}>{p}x {p === 1 ? 'à vista' : 'sem juros'}</option>
                       ))}
                     </select>
@@ -2107,13 +2339,26 @@ export default function Venda() {
                         fontWeight: 700,
                         cursor: 'pointer'
                       }}
-                      disabled={totalAPagarCaixa > 0 && saldoRestante <= 0}
                     >
                       Inserir
                     </button>
                   </div>
                 </div>
               </form>
+
+              {vendaParcelada && (
+                <div>
+                  <button
+                    type="button"
+                    className="btn solid"
+                    onClick={handleFinanciarSaldo}
+                    disabled={carregando || !vendaEditavel || saldoRestante <= 0}
+                    style={{ padding: '10px 18px', fontWeight: 700 }}
+                  >
+                    Financiar saldo em {pagtoVenda.parcelasCondicao}x no cartão
+                  </button>
+                </div>
+              )}
 
               {/* Renova: Desconto fabricante (do backend) + Voucher (pagamento) */}
               <fieldset style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '14px 18px', maxWidth: 840, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -2200,7 +2445,12 @@ export default function Venda() {
                     ) : (
                       pagamentos.map((item) => (
                         <tr key={item.id} style={{ borderBottom: '1px solid var(--line)', color: 'var(--text)' }}>
-                          <td style={{ padding: '12px 16px' }}><b>{item.forma}</b></td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <b>{item.forma}</b>
+                            {item.tipo === 'ENTRADA' && (
+                              <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-faint)' }}>Entrada</span>
+                            )}
+                          </td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--good)', padding: '12px 16px' }} className="mono">
                             {formatadorMoeda.format(item.valor)}
                           </td>
@@ -2219,6 +2469,15 @@ export default function Venda() {
                   </tbody>
                 </table>
               </div>
+
+              <ResumoPagamento
+                pagto={pagtoVenda}
+                total={totalAPagarCaixa}
+                pago={totalPagoAteAgora}
+                saldo={saldoBackend}
+                renova={renovaAtivo}
+                descontoFabricante={descontoFabricante}
+              />
             </div>
           )}
 
