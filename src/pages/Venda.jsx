@@ -275,6 +275,33 @@ function CartoesCondicao({ simulacao, condicao, parcelas, bloqueado, onEscolher,
   );
 }
 
+/** Resumo da aba Pagamento: só exibe o que o backend devolveu. */
+function ResumoPagamento({ pagto, total, pago, saldo, renova, descontoFabricante }) {
+  const ajuste = pagto.ajusteCondicao || 0;
+  const linha = (rotulo, valor, destaque) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: destaque ? 14.5 : 13 }}>
+      <span style={{ color: destaque ? 'var(--text)' : 'var(--text-dim)', fontWeight: destaque ? 700 : 500 }}>{rotulo}</span>
+      <span className="mono" style={{ color: 'var(--text)', fontWeight: destaque ? 700 : 600 }}>{formatadorMoeda.format(valor || 0)}</span>
+    </div>
+  );
+  return (
+    <fieldset style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '14px 18px', maxWidth: 840, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <legend style={{ padding: '0 8px', color: 'var(--accent, #a855f7)', fontSize: 13, fontWeight: 700 }}>Resumo do pagamento</legend>
+      {linha('Itens (preço cheio)', pagto.valorItens)}
+      {ajuste !== 0 && linha(ajuste < 0 ? 'Desconto PIX' : 'Juros', ajuste)}
+      {renova && linha('Desconto fabricante (Renova, informativo)', descontoFabricante)}
+      {linha('Total', total, true)}
+      {linha('Pago', pago)}
+      {linha('Saldo', saldo, true)}
+      {api.ehParcelado(pagto.condicaoPagamento) && (
+        <div className="mono" style={{ textAlign: 'right', fontSize: 13, color: 'var(--text-dim)' }}>
+          {pagto.parcelasCondicao} × {formatadorMoeda.format(pagto.valorParcela || 0)}
+        </div>
+      )}
+    </fieldset>
+  );
+}
+
 /** Área de preço da tabela vigente: cartão/débito/dinheiro, PIX, parcelas 13x–21x e vigência. */
 function PainelPreco({ estado, vazio }) {
   const linha = { display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 14 };
@@ -876,14 +903,6 @@ export default function Venda() {
       alert('Selecione a forma de pagamento.');
       return;
     }
-    if (!v || v <= 0) {
-      alert('Introduza um valor de pagamento válido.');
-      return;
-    }
-    if (totalAPagarCaixa > 0 && v > saldoRestante + 0.01) {
-      alert(`O valor indicado (${formatadorMoeda.format(v)}) excede o saldo restante (${formatadorMoeda.format(saldoRestante)}).`);
-      return;
-    }
     const credito = pgtoForm.forma === 'Cartão de Crédito';
     const voucher = pgtoForm.forma === 'Voucher';
     if (voucher && !pgtoForm.codigoVoucher.trim()) {
@@ -957,11 +976,6 @@ export default function Venda() {
     }
     if (avisoVenda) {
       alert(avisoVenda);
-      setAbaAtiva('PAGAMENTO');
-      return;
-    }
-    if (totalAPagarCaixa > 0 && saldoRestante > 0.01) {
-      alert(`Existe um saldo pendente de ${formatadorMoeda.format(saldoRestante)}. Registe o pagamento na aba "Pagamento".`);
       setAbaAtiva('PAGAMENTO');
       return;
     }
@@ -2259,18 +2273,6 @@ export default function Venda() {
                 )}
 
                 <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Valor total:</label>
-                  <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--good)' }}>
-                    {formatadorMoeda.format(totalAPagarCaixa)}
-                    {totalPagoAteAgora > 0 && (
-                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-faint)', marginLeft: 10 }}>
-                        (Restante: {formatadorMoeda.format(saldoRestante)})
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                   <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Forma de pagamento:</label>
                   <select
                     value={pgtoForm.forma}
@@ -2467,6 +2469,15 @@ export default function Venda() {
                   </tbody>
                 </table>
               </div>
+
+              <ResumoPagamento
+                pagto={pagtoVenda}
+                total={totalAPagarCaixa}
+                pago={totalPagoAteAgora}
+                saldo={saldoBackend}
+                renova={renovaAtivo}
+                descontoFabricante={descontoFabricante}
+              />
             </div>
           )}
 
