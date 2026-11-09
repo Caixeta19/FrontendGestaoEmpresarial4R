@@ -410,10 +410,15 @@ export default function Venda() {
     timerSucessoRef.current = setTimeout(() => setMensagemSucesso(''), duracaoMs);
   };
 
-  // Identificação
+  // Identificação e vendedor (a senha só é usada ao lançar ou cancelar a venda)
   const [pdvId, setPdvId] = useState('');
+  const [vendedorId, setVendedorId] = useState('');
   const [cliente, setCliente] = useState(null);
   const [buscaCliente, setBuscaCliente] = useState('');
+  const [emailLogin, setEmailLogin] = useState('');
+  const [senha, setSenha] = useState('');
+  const [erroSenha, setErroSenha] = useState('');
+  const senhaRef = useRef(null);
 
   const showToast = useToast();
 
@@ -649,6 +654,7 @@ export default function Venda() {
   // =========================================================================
   const num = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Math.round(Number(v) * 100) / 100);
   const sim = (v) => v === true || v === 'Sim';
+  const credenciais = () => ({ email: emailLogin.trim(), senha });
 
   const executar = async (fn) => {
     setErro('');
@@ -715,8 +721,19 @@ export default function Venda() {
     setPagamentos([]);
     setPgtoForm((prev) => ({ ...prev, valor: '' }));
     setItensPorCategoria({ PRODUTO_VIVO: [], SERVICO_VIVO: [], ACESSORIO: [], RECARGA: [] });
+    setSenha('');
+    setErroSenha('');
     setAbaAtiva('INICIO');
     inicioSalvoRef.current = { clienteId: null, filialId: null };
+  };
+
+  /** Trocar o vendedor preenche o login dele; a senha digitada é de outra pessoa e é apagada. */
+  const handleSelecionarVendedor = (id) => {
+    setVendedorId(id);
+    const v = vendedores.find((x) => String(x.id) === String(id));
+    setEmailLogin(v?.login || v?.email || '');
+    setSenha('');
+    setErroSenha('');
   };
 
   /** Abre o carrinho no backend na primeira ação (ou sincroniza cliente/PDV se mudaram). Devolve o id da venda. */
@@ -1084,6 +1101,11 @@ export default function Venda() {
     return vendedores.find((v) => login && v.login?.toLowerCase() === login)?.id ?? null;
   }, [vendedores]);
 
+  // O select começa no usuário logado, assim que a lista de vendedores chega
+  useEffect(() => {
+    if (!vendedorId && vendedorLogadoId) handleSelecionarVendedor(String(vendedorLogadoId));
+  }, [vendedorLogadoId]);
+
   return (
     <div style={{ 
       width: '100%', 
@@ -1226,6 +1248,20 @@ export default function Venda() {
                 </select>
               </div>
 
+              <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
+                <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Vendedor:</label>
+                <select
+                  value={vendedorId}
+                  onChange={(e) => handleSelecionarVendedor(e.target.value)}
+                  style={{ ...inputStyleGlobal, width: '100%', maxWidth: 760 }}
+                >
+                  <option value="">Escolha...</option>
+                  {vendedores.map((v) => (
+                    <option key={v.id} value={v.id}>{v.nome}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'start', gap: 16, margin: 0 }}>
                 <label style={{ marginTop: 10, fontWeight: 600, color: 'var(--text)' }}>Cliente:</label>
                 <div style={{ position: 'relative', width: '100%', maxWidth: 760 }}>
@@ -1290,6 +1326,50 @@ export default function Venda() {
                 </div>
               </div>
 
+              <fieldset style={{
+                borderRadius: 8,
+                padding: '18px 24px',
+                marginTop: 12,
+                border: '1px solid var(--line)',
+                background: 'var(--panel-2)',
+                width: '100%',
+                maxWidth: 760,
+                boxSizing: 'border-box'
+              }}>
+                <legend style={{ padding: '0 8px', color: 'var(--accent, #c026d3)', fontSize: 13, fontWeight: 700 }}>
+                  Autenticação do vendedor:
+                </legend>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
+                    <label style={{ margin: 0, color: 'var(--text)' }}>E-mail / Login:</label>
+                    <input
+                      type="text"
+                      placeholder="email@dominio.com"
+                      value={emailLogin}
+                      onChange={(e) => setEmailLogin(e.target.value)}
+                      style={inputStyleGlobal}
+                    />
+                  </div>
+                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'start', gap: 14, margin: 0 }}>
+                    <label style={{ marginTop: 8, color: 'var(--text)' }}>Senha:</label>
+                    <div>
+                      <input
+                        ref={senhaRef}
+                        type="password"
+                        placeholder="Senha do vendedor..."
+                        value={senha}
+                        onChange={(e) => { setSenha(e.target.value); setErroSenha(''); }}
+                        style={{ ...inputStyleGlobal, width: '100%' }}
+                      />
+                      {erroSenha && (
+                        <small role="alert" style={{ color: 'var(--bad, #ef4444)', display: 'block', marginTop: 4, fontWeight: 600 }}>
+                          {erroSenha}
+                        </small>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </fieldset>
             </div>
           )}
 
