@@ -4,14 +4,9 @@ import { Pencil, Plus, Trash2, CheckCircle, HelpCircle, X, Check } from 'lucide-
 import * as api from '../services/vendasApi';
 import { loginDoToken } from '../services/api';
 import { useToast } from '../components/ToastContext.jsx';
-import AuthModal from '../components/AuthModal.jsx';
 
-// Textos do modal de autenticação em cada mudança de status
-const ACOES_STATUS = {
-  APROVADA: { titulo: 'Aprovar venda', textoConfirmar: 'Aprovar venda' },
-  CONCLUIDA: { titulo: 'Concluir venda', textoConfirmar: 'Concluir venda' },
-  CANCELADA: { titulo: 'Cancelar venda', textoConfirmar: 'Cancelar venda', textoFechar: 'Voltar' },
-};
+/** Selo do cabeçalho: CONCLUIDA aparece como LANÇADA. */
+const rotuloStatus = (status) => (status === 'CONCLUIDA' ? 'LANÇADA' : status);
 
 const rotuloCondicao = (condicao) => {
   if (condicao === 'PIX') return 'PIX';
@@ -410,10 +405,21 @@ export default function Venda() {
     timerSucessoRef.current = setTimeout(() => setMensagemSucesso(''), duracaoMs);
   };
 
-  // Identificação
+  // Identificação e vendedor (a senha só é usada ao lançar ou cancelar a venda)
   const [pdvId, setPdvId] = useState('');
+  const [vendedorId, setVendedorId] = useState('');
   const [cliente, setCliente] = useState(null);
   const [buscaCliente, setBuscaCliente] = useState('');
+  const [emailLogin, setEmailLogin] = useState('');
+  const [senha, setSenha] = useState('');
+  const [erroSenha, setErroSenha] = useState('');
+  const senhaRef = useRef(null);
+  // MONTAGEM: botão "Lançar venda" confere a venda. AUTENTICACAO: "Confirmar lançamento" envia vendedor e senha.
+  const [etapaLancamento, setEtapaLancamento] = useState('MONTAGEM');
+  // O que a autenticação vai confirmar: lançar a venda ou cancelá-la (aberta ou lançada)
+  const [acaoAutenticacao, setAcaoAutenticacao] = useState('LANCAR');
+  const autenticando = etapaLancamento === 'AUTENTICACAO';
+  const cancelando = autenticando && acaoAutenticacao === 'CANCELAR';
 
   const showToast = useToast();
 
@@ -435,9 +441,6 @@ export default function Venda() {
   const [filiais, setFiliais] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [erro, setErro] = useState('');
-  const [acaoAutenticacao, setAcaoAutenticacao] = useState(null); // ação à espera da senha; null = modal fechado
-  const [erroAutenticacao, setErroAutenticacao] = useState('');
-  const [autenticando, setAutenticando] = useState(false);
   const [clientesSugeridos, setClientesSugeridos] = useState([]);
   const [aparelhosSugeridos, setAparelhosSugeridos] = useState([]);
   const [acessoriosSugeridos, setAcessoriosSugeridos] = useState([]);
@@ -649,6 +652,7 @@ export default function Venda() {
   // =========================================================================
   const num = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Math.round(Number(v) * 100) / 100);
   const sim = (v) => v === true || v === 'Sim';
+  const credenciais = () => ({ email: emailLogin.trim(), senha });
 
   const executar = async (fn) => {
     setErro('');
@@ -663,7 +667,9 @@ export default function Venda() {
     }
   };
 
+  /** Toda resposta que muda a venda passa por aqui: a venda mudou, então o vendedor confere de novo antes de lançar. */
   const aplicarVenda = (v) => {
+    setEtapaLancamento('MONTAGEM');
     const tela = api.vendaParaTela(v);
     setVendaId(v.id);
     setNumeroVenda(tela.numero);
@@ -715,8 +721,20 @@ export default function Venda() {
     setPagamentos([]);
     setPgtoForm((prev) => ({ ...prev, valor: '' }));
     setItensPorCategoria({ PRODUTO_VIVO: [], SERVICO_VIVO: [], ACESSORIO: [], RECARGA: [] });
+    setSenha('');
+    setErroSenha('');
+    setEtapaLancamento('MONTAGEM');
     setAbaAtiva('INICIO');
     inicioSalvoRef.current = { clienteId: null, filialId: null };
+  };
+
+  /** Trocar o vendedor preenche o login dele; a senha digitada é de outra pessoa e é apagada. */
+  const handleSelecionarVendedor = (id) => {
+    setVendedorId(id);
+    const v = vendedores.find((x) => String(x.id) === String(id));
+    setEmailLogin(v?.login || v?.email || '');
+    setSenha('');
+    setErroSenha('');
   };
 
   /** Abre o carrinho no backend na primeira ação (ou sincroniza cliente/PDV se mudaram). Devolve o id da venda. */
@@ -988,8 +1006,8 @@ export default function Venda() {
     setAbaAtiva(aba);
   };
 
-  /** Confere se a venda pode ser fechada e só então pede a autenticação do vendedor. */
-  const handleSalvarVenda = () => {
+  /** Primeiro clique: confere a venda e, com tudo certo, pede a autenticação do vendedor na aba Início. */
+  const handleLancarVenda = () => {
     if (!cliente?.id || !pdvId) {
       recusarSalvar('Selecione o cliente e o PDV na aba Início.', 'INICIO');
       return;
@@ -1012,77 +1030,127 @@ export default function Venda() {
     }
     executar(async () => {
       await garantirVenda();
-      abrirAutenticacao('FINALIZAR');
+      setErroSenha('');
+      setAcaoAutenticacao('LANCAR');
+      setEtapaLancamento('AUTENTICACAO');
+      setAbaAtiva('INICIO');
     });
   };
 
-  const confirmarFinalizacao = async (credenciaisModal) => {
-    let v;
-    try {
-      v = await api.finalizar(vendaId, credenciaisModal);
-    } catch (e) {
-      if (e.status !== 422) throw e;
-      // O 422 pode ser o total reprecificado: recarrega para mostrar os valores atuais e mantém a mensagem na tela
-      setAcaoAutenticacao(null);
-      try {
-        aplicarVenda(await api.buscarVenda(vendaId));
-      } catch {
-        // Falhou só a recarga: a mensagem do finalizar continua sendo a informação principal
-      }
-      setErro(e.mensagem || 'Não foi possível finalizar a venda.');
-      setAbaAtiva('PAGAMENTO');
-      return;
+  const voltarParaMontagem = () => {
+    setErroSenha('');
+    setEtapaLancamento('MONTAGEM');
+  };
+
+  const pedirSenha = (mensagem) => {
+    setErroSenha(mensagem);
+    setAbaAtiva('INICIO');
+    setTimeout(() => senhaRef.current?.focus(), 0);
+  };
+
+  /** Sem vendedor ou senha, a mensagem fica embaixo do campo e nada é enviado. */
+  const credenciaisPreenchidas = () => {
+    if (!vendedorId || !emailLogin.trim()) {
+      setErroSenha('Selecione o vendedor.');
+      setAbaAtiva('INICIO');
+      return false;
     }
-    const numero = String(v.numeroVenda).padStart(6, '0');
-    setAcaoAutenticacao(null);
-    resetarTela();
-    mostrarSucesso(`Venda #${numero} finalizada por ${v.finalizadoPorNome || v.vendedorNome} e enviada para aprovação.`, 6000);
+    if (!senha) {
+      pedirSenha('Informe a senha do vendedor.');
+      return false;
+    }
+    return true;
   };
 
-  const abrirAutenticacao = (acao) => {
-    setErroAutenticacao('');
-    setAcaoAutenticacao(acao);
-  };
-
-  /** Aprovar / Concluir / Cancelar (cancelar devolve os IMEIs ao estoque). */
-  const handleMudarStatus = (novoStatus) => {
-    if (vendaId) abrirAutenticacao(novoStatus);
-  };
-
-  const confirmarMudancaStatus = async (novoStatus, credenciaisModal) => {
-    const v = await api.mudarStatus(vendaId, novoStatus, credenciaisModal);
-    const numero = String(v.numeroVenda).padStart(6, '0');
-    setAcaoAutenticacao(null);
-    if (novoStatus === 'CANCELADA') resetarTela();
-    else aplicarVenda(v);
-    mostrarSucesso(`Venda #${numero}: status alterado para ${v.status}.`);
-  };
-
-  /** 401 e falhas inesperadas ficam no modal, que continua aberto; 422 é regra da venda e volta para a tela. */
-  const handleConfirmarAutenticacao = async (credenciaisModal) => {
+  /** Segundo clique (ou Enter na senha): lança a venda no nome do vendedor autenticado. */
+  const handleConfirmarLancamento = async () => {
+    if (!credenciaisPreenchidas()) return;
     setErro('');
-    setErroAutenticacao('');
-    setAutenticando(true);
+    setErroSenha('');
+    setCarregando(true);
     try {
-      if (acaoAutenticacao === 'FINALIZAR') await confirmarFinalizacao(credenciaisModal);
-      else await confirmarMudancaStatus(acaoAutenticacao, credenciaisModal);
+      const v = await api.finalizar(vendaId, credenciais());
+      const numero = String(v.numeroVenda).padStart(6, '0');
+      resetarTela();
+      mostrarSucesso(`Venda #${numero} lançada por ${v.finalizadoPorNome || v.vendedorNome}.`, 6000);
     } catch (e) {
       const msg = e.mensagem || e.message || 'Falha ao comunicar com o servidor.';
-      if (e.status === 422) {
-        setAcaoAutenticacao(null);
+      if (e.status === 401) {
+        setSenha('');
+        pedirSenha('Senha do vendedor inválida.');
+      } else if (e.status === 422) {
+        // O 422 pode ser o total reprecificado: recarrega para mostrar os valores atuais e mantém a mensagem na tela
+        setEtapaLancamento('MONTAGEM');
+        try {
+          aplicarVenda(await api.buscarVenda(vendaId));
+        } catch {
+          // Falhou só a recarga: a mensagem do finalizar continua sendo a informação principal
+        }
         setErro(msg);
+        setAbaAtiva('PAGAMENTO');
       } else {
-        setErroAutenticacao(msg);
+        setErro(msg);
       }
     } finally {
-      setAutenticando(false);
+      setCarregando(false);
     }
   };
+
+  /** "Cancelar venda": pede a mesma autenticação da aba Início; o cancelamento devolve os IMEIs/seriais ao estoque. */
+  const handleCancelarVenda = () => {
+    if (!vendaId) return;
+    setErro('');
+    setErroSenha('');
+    setAcaoAutenticacao('CANCELAR');
+    setEtapaLancamento('AUTENTICACAO');
+    setAbaAtiva('INICIO');
+  };
+
+  const handleConfirmarCancelamento = async () => {
+    if (!credenciaisPreenchidas()) return;
+    setErro('');
+    setErroSenha('');
+    setCarregando(true);
+    try {
+      const v = await api.mudarStatus(vendaId, 'CANCELADA', credenciais());
+      const numero = String(v.numeroVenda).padStart(6, '0');
+      const quem = vendedores.find((x) => String(x.id) === String(vendedorId))?.nome;
+      resetarTela();
+      mostrarSucesso(`Venda #${numero} cancelada${quem ? ` por ${quem}` : ''}. Os IMEIs/seriais voltaram ao estoque.`, 6000);
+    } catch (e) {
+      const msg = e.mensagem || e.message || 'Falha ao comunicar com o servidor.';
+      if (e.status === 401) {
+        setSenha('');
+        pedirSenha('Senha do vendedor inválida.');
+      } else {
+        if (e.status === 422) setEtapaLancamento('MONTAGEM');
+        setErro(msg);
+      }
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const handleConfirmarAutenticacao = () => (cancelando ? handleConfirmarCancelamento() : handleConfirmarLancamento());
 
   const vendedorLogadoId = useMemo(() => {
     const login = loginDoToken()?.toLowerCase();
     return vendedores.find((v) => login && v.login?.toLowerCase() === login)?.id ?? null;
   }, [vendedores]);
+
+  // Cliente ou PDV trocados na aba Início também mudam a venda
+  useEffect(() => {
+    setEtapaLancamento('MONTAGEM');
+  }, [cliente?.id, pdvId]);
+
+  useEffect(() => {
+    if (etapaLancamento === 'AUTENTICACAO' && abaAtiva === 'INICIO') senhaRef.current?.focus();
+  }, [etapaLancamento, abaAtiva]);
+
+  // O select começa no usuário logado, assim que a lista de vendedores chega
+  useEffect(() => {
+    if (!vendedorId && vendedorLogadoId) handleSelecionarVendedor(String(vendedorLogadoId));
+  }, [vendedorLogadoId]);
 
   return (
     <div style={{ 
@@ -1127,14 +1195,8 @@ export default function Venda() {
 
       {vendaId && (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          {status === 'PENDENTE' && (
-            <button type="button" className="btn solid" disabled={carregando} onClick={() => handleMudarStatus('APROVADA')}>Aprovar</button>
-          )}
-          {status === 'APROVADA' && (
-            <button type="button" className="btn solid" disabled={carregando} onClick={() => handleMudarStatus('CONCLUIDA')}>Concluir</button>
-          )}
-          {status !== 'CANCELADA' && (
-            <button type="button" className="btn ghost" disabled={carregando} onClick={() => handleMudarStatus('CANCELADA')}>Cancelar venda</button>
+          {(status === 'ABERTA' || status === 'CONCLUIDA') && (
+            <button type="button" className="btn ghost" disabled={carregando || cancelando} onClick={handleCancelarVenda}>Cancelar venda</button>
           )}
         </div>
       )}
@@ -1156,7 +1218,7 @@ export default function Venda() {
           fontSize: 12,
           fontWeight: 700
         }}>
-          {status === 'ABERTA' ? 'ABERTA' : status}
+          {rotuloStatus(status)}
         </span>
       </div>
 
@@ -1226,6 +1288,20 @@ export default function Venda() {
                 </select>
               </div>
 
+              <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
+                <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Vendedor:</label>
+                <select
+                  value={vendedorId}
+                  onChange={(e) => handleSelecionarVendedor(e.target.value)}
+                  style={{ ...inputStyleGlobal, width: '100%', maxWidth: 760 }}
+                >
+                  <option value="">Escolha...</option>
+                  {vendedores.map((v) => (
+                    <option key={v.id} value={v.id}>{v.nome}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'start', gap: 16, margin: 0 }}>
                 <label style={{ marginTop: 10, fontWeight: 600, color: 'var(--text)' }}>Cliente:</label>
                 <div style={{ position: 'relative', width: '100%', maxWidth: 760 }}>
@@ -1290,6 +1366,68 @@ export default function Venda() {
                 </div>
               </div>
 
+              <fieldset style={{
+                borderRadius: 8,
+                padding: '18px 24px',
+                marginTop: 12,
+                border: autenticando ? '2px solid var(--accent, #c026d3)' : '1px solid var(--line)',
+                boxShadow: autenticando ? '0 0 0 4px rgba(192, 38, 211, 0.15)' : 'none',
+                background: 'var(--panel-2)',
+                width: '100%',
+                maxWidth: 760,
+                boxSizing: 'border-box'
+              }}>
+                <legend style={{ padding: '0 8px', color: 'var(--accent, #c026d3)', fontSize: 13, fontWeight: 700 }}>
+                  Autenticação do vendedor:
+                </legend>
+                {autenticando && (
+                  <>
+                    <p style={{ margin: '0 0 10px', color: 'var(--accent, #c026d3)', fontSize: 13, fontWeight: 600 }}>
+                      {cancelando
+                        ? 'Confirme com a senha do vendedor para cancelar a venda. Os IMEIs/seriais voltam ao estoque.'
+                        : 'Confirme com a senha do vendedor para lançar a venda'}
+                    </p>
+                    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13, margin: '0 0 14px', color: 'var(--text-faint)' }}>
+                      <span>Total <b className="mono" style={{ color: 'var(--text)' }}>{formatadorMoeda.format(totalAPagarCaixa)}</b></span>
+                      <span>Condição <b style={{ color: 'var(--text)' }}>{rotuloCondicao(condicaoVenda)}</b></span>
+                      <span>Itens <b style={{ color: 'var(--text)' }}>{totalItensCarrinho}</b></span>
+                    </div>
+                  </>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
+                    <label style={{ margin: 0, color: 'var(--text)' }}>E-mail / Login:</label>
+                    <input
+                      type="text"
+                      placeholder="email@dominio.com"
+                      value={emailLogin}
+                      onChange={(e) => setEmailLogin(e.target.value)}
+                      style={inputStyleGlobal}
+                    />
+                  </div>
+                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'start', gap: 14, margin: 0 }}>
+                    <label style={{ marginTop: 8, color: 'var(--text)' }}>Senha:</label>
+                    <div>
+                      <input
+                        ref={senhaRef}
+                        type="password"
+                        placeholder="Senha do vendedor..."
+                        value={senha}
+                        onChange={(e) => { setSenha(e.target.value); setErroSenha(''); }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && autenticando && !carregando) handleConfirmarAutenticacao();
+                        }}
+                        style={{ ...inputStyleGlobal, width: '100%' }}
+                      />
+                      {erroSenha && (
+                        <small role="alert" style={{ color: 'var(--bad, #ef4444)', display: 'block', marginTop: 4, fontWeight: 600 }}>
+                          {erroSenha}
+                        </small>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </fieldset>
             </div>
           )}
 
@@ -2568,10 +2706,16 @@ export default function Venda() {
             </span>
           </div>
 
+          {autenticando && (
+            <button type="button" className="btn ghost" onClick={voltarParaMontagem} disabled={carregando}
+              style={{ padding: '12px 20px', fontSize: 14, borderRadius: 8, fontWeight: 600 }}>
+              Voltar
+            </button>
+          )}
           <button
             type="button"
-            onClick={handleSalvarVenda}
-            disabled={carregando || status !== 'ABERTA'}
+            onClick={autenticando ? handleConfirmarAutenticacao : handleLancarVenda}
+            disabled={carregando || (status !== 'ABERTA' && !cancelando)}
             className="btn solid"
             style={{ 
               padding: '12px 26px', 
@@ -2584,33 +2728,15 @@ export default function Venda() {
               cursor: carregando ? 'not-allowed' : 'pointer'
             }}
           >
-            {carregando ? 'A gravar venda...' : 'Salvar venda'}
+            {cancelando
+              ? (carregando ? 'Cancelando venda...' : 'Confirmar cancelamento')
+              : carregando
+                ? (autenticando ? 'Lançando venda...' : 'Conferindo venda...')
+                : (autenticando ? 'Confirmar lançamento' : status === 'CONCLUIDA' ? 'Venda lançada' : 'Lançar venda')}
           </button>
         </div>
       </div>
 
-      <AuthModal
-        open={Boolean(acaoAutenticacao)}
-        {...ACOES_STATUS[acaoAutenticacao]}
-        vendedores={vendedores}
-        vendedorInicial={vendedorLogadoId}
-        onConfirmar={handleConfirmarAutenticacao}
-        onClose={() => setAcaoAutenticacao(null)}
-        erro={erroAutenticacao}
-        carregando={autenticando}
-      >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 12px', fontSize: 13, margin: '10px 0 16px' }}>
-          <span style={{ color: 'var(--text-faint)' }}>Total</span>
-          <b className="mono">{formatadorMoeda.format(totalAPagarCaixa)}</b>
-          <span style={{ color: 'var(--text-faint)' }}>Condição</span>
-          <b>{rotuloCondicao(condicaoVenda)}</b>
-          <span style={{ color: 'var(--text-faint)' }}>Itens</span>
-          <b>{totalItensCarrinho}</b>
-        </div>
-        {acaoAutenticacao === 'CANCELADA' && (
-          <p>Os IMEIs/seriais desta venda voltam ao estoque.</p>
-        )}
-      </AuthModal>
     </div>
   );
 }
