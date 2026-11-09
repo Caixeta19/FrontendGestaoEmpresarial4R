@@ -10,6 +10,17 @@ const numeroOuNull = (v) => (v === null || v === undefined || v === '' || Number
 const moedaBR = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 export const formatarMoeda = (v) => moedaBR.format(Number(v) || 0);
 
+/**
+ * Valor digitado -> número. Aceita "1.199,50", "1199,50", "1199.50" e "1.199" (milhar). Inválido -> NaN.
+ */
+export const lerValorBR = (texto) => {
+  const t = String(texto ?? '').trim();
+  let normal = t;
+  if (t.includes(',')) normal = t.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) normal = t.replace(/\./g, '');
+  return /^-?\d*\.?\d+$/.test(normal) ? Number(normal) : NaN;
+};
+
 /** "2026-11-01" (LocalDate) -> "01/11/2026". Sem passar por Date para não deslocar o fuso. */
 export const formatarData = (iso) => {
   if (!iso) return '—';
