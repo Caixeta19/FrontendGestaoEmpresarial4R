@@ -401,13 +401,10 @@ export default function Venda() {
   const [carregando, setCarregando] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState('');
 
-  // Identificação e Vendedor
+  // Identificação
   const [pdvId, setPdvId] = useState('');
-  const [vendedorId, setVendedorId] = useState('');
   const [cliente, setCliente] = useState(null);
   const [buscaCliente, setBuscaCliente] = useState('');
-  const [emailLogin, setEmailLogin] = useState('');
-  const [senha, setSenha] = useState('');
 
   const showToast = useToast();
 
@@ -643,7 +640,6 @@ export default function Venda() {
   // =========================================================================
   const num = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Math.round(Number(v) * 100) / 100);
   const sim = (v) => v === true || v === 'Sim';
-  const credenciais = () => ({ email: emailLogin.trim(), senha });
 
   const executar = async (fn) => {
     setErro('');
@@ -710,22 +706,14 @@ export default function Venda() {
     setPagamentos([]);
     setPgtoForm((prev) => ({ ...prev, valor: '' }));
     setItensPorCategoria({ PRODUTO_VIVO: [], SERVICO_VIVO: [], ACESSORIO: [], RECARGA: [] });
-    setSenha('');
     setAbaAtiva('INICIO');
     inicioSalvoRef.current = { clienteId: null, filialId: null };
-  };
-
-  const handleSelecionarVendedor = (id) => {
-    setVendedorId(id);
-    const v = vendedores.find((x) => String(x.id) === String(id));
-    setEmailLogin(v?.email || '');
   };
 
   /** Abre o carrinho no backend na primeira ação (ou sincroniza cliente/PDV se mudaram). Devolve o id da venda. */
   const garantirVenda = async () => {
     if (!pdvId) throw new Error('Selecione o PDV na aba Início.');
     if (!cliente?.id) throw new Error('Selecione um cliente cadastrado na aba Início.');
-    if (!emailLogin.trim() || !senha) throw new Error('Informe o e-mail e a senha do vendedor na aba Início.');
 
     const filialId = Number(pdvId);
     if (!vendaId) {
@@ -733,7 +721,6 @@ export default function Venda() {
         clienteId: cliente.id,
         filialId,
         estoqueAvancado: false,
-        autenticacaoVendedor: credenciais(),
       });
       inicioSalvoRef.current = { clienteId: cliente.id, filialId };
       aplicarVenda(v);
@@ -746,7 +733,6 @@ export default function Venda() {
         clienteId: cliente.id,
         filialId,
         estoqueAvancado: false,
-        autenticacaoUsuario: credenciais(),
       });
       inicioSalvoRef.current = { clienteId: cliente.id, filialId };
       aplicarVenda(v);
@@ -990,38 +976,61 @@ export default function Venda() {
     executar(async () => aplicarVenda(await api.removerPagamento(vendaId, id)));
   };
 
-  const handleFinalizarVenda = () => {
+  const recusarSalvar = (mensagem, aba) => {
+    showToast(mensagem, true);
+    setAbaAtiva(aba);
+  };
+
+  /** Confere se a venda pode ser fechada e só então pede a autenticação do vendedor. */
+  const handleSalvarVenda = () => {
+    if (!cliente?.id || !pdvId) {
+      recusarSalvar('Selecione o cliente e o PDV na aba Início.', 'INICIO');
+      return;
+    }
     if (totalItensCarrinho === 0) {
-      showToast('Adicione pelo menos um item ao carrinho antes de finalizar a venda.', true);
+      recusarSalvar('Adicione pelo menos um item ao carrinho.', 'PRODUTO_VIVO');
       return;
     }
     if (avisoVenda) {
-      showToast(avisoVenda, true);
-      setAbaAtiva('PAGAMENTO');
+      recusarSalvar(avisoVenda, 'PAGAMENTO');
+      return;
+    }
+    if (Math.abs(saldoBackend) >= 0.005) {
+      recusarSalvar(`Os pagamentos precisam fechar o total da venda: saldo de ${formatadorMoeda.format(saldoBackend)}.`, 'PAGAMENTO');
+      return;
+    }
+    if (renovaAtivo && !temVoucher) {
+      recusarSalvar('Informe o número do voucher do Renova.', 'PAGAMENTO');
       return;
     }
     executar(async () => {
-      const id = await garantirVenda();
-      let v;
-      try {
-        v = await api.finalizar(id, credenciais());
-      } catch (e) {
-        if (e.status !== 422) throw e;
-        // O 422 pode ser o total reprecificado: recarrega para mostrar os valores atuais e mantém a mensagem na tela
-        try {
-          aplicarVenda(await api.buscarVenda(id));
-        } catch {
-          // Falhou só a recarga: a mensagem do finalizar continua sendo a informação principal
-        }
-        setErro(e.mensagem || 'Não foi possível finalizar a venda.');
-        setAbaAtiva('PAGAMENTO');
-        return;
-      }
-      const numero = String(v.numeroVenda).padStart(6, '0');
-      resetarTela();
-      setMensagemSucesso(`Venda #${numero} finalizada e enviada para aprovação (status ${v.status}).`);
-      setTimeout(() => setMensagemSucesso(''), 6000);
+      await garantirVenda();
+      abrirAutenticacao('FINALIZAR');
     });
+  };
+
+  const confirmarFinalizacao = async (credenciaisModal) => {
+    let v;
+    try {
+      v = await api.finalizar(vendaId, credenciaisModal);
+    } catch (e) {
+      if (e.status !== 422) throw e;
+      // O 422 pode ser o total reprecificado: recarrega para mostrar os valores atuais e mantém a mensagem na tela
+      setAcaoAutenticacao(null);
+      try {
+        aplicarVenda(await api.buscarVenda(vendaId));
+      } catch {
+        // Falhou só a recarga: a mensagem do finalizar continua sendo a informação principal
+      }
+      setErro(e.mensagem || 'Não foi possível finalizar a venda.');
+      setAbaAtiva('PAGAMENTO');
+      return;
+    }
+    const numero = String(v.numeroVenda).padStart(6, '0');
+    setAcaoAutenticacao(null);
+    resetarTela();
+    setMensagemSucesso(`Venda #${numero} finalizada por ${v.finalizadoPorNome || v.vendedorNome} e enviada para aprovação.`);
+    setTimeout(() => setMensagemSucesso(''), 6000);
   };
 
   const abrirAutenticacao = (acao) => {
@@ -1050,7 +1059,8 @@ export default function Venda() {
     setErroAutenticacao('');
     setAutenticando(true);
     try {
-      await confirmarMudancaStatus(acaoAutenticacao, credenciaisModal);
+      if (acaoAutenticacao === 'FINALIZAR') await confirmarFinalizacao(credenciaisModal);
+      else await confirmarMudancaStatus(acaoAutenticacao, credenciaisModal);
     } catch (e) {
       const msg = e.mensagem || e.message || 'Falha ao comunicar com o servidor.';
       if (e.status === 422) {
@@ -1211,20 +1221,6 @@ export default function Venda() {
                 </select>
               </div>
 
-              <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Vendedor:</label>
-                <select 
-                  value={vendedorId} 
-                  onChange={(e) => handleSelecionarVendedor(e.target.value)} 
-                  style={{ ...inputStyleGlobal, width: '100%', maxWidth: 760 }}
-                >
-                  <option value="">Escolha...</option>
-                  {vendedores.map((v) => (
-                    <option key={v.id} value={v.id}>{v.nome}</option>
-                  ))}
-                </select>
-              </div>
-
               <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'start', gap: 16, margin: 0 }}>
                 <label style={{ marginTop: 10, fontWeight: 600, color: 'var(--text)' }}>Cliente:</label>
                 <div style={{ position: 'relative', width: '100%', maxWidth: 760 }}>
@@ -1289,42 +1285,6 @@ export default function Venda() {
                 </div>
               </div>
 
-              <fieldset style={{ 
-                borderRadius: 8, 
-                padding: '18px 24px', 
-                marginTop: 12, 
-                border: '1px solid var(--line)', 
-                background: 'var(--panel-2)',
-                width: '100%', 
-                maxWidth: 760, 
-                boxSizing: 'border-box' 
-              }}>
-                <legend style={{ padding: '0 8px', color: 'var(--accent, #c026d3)', fontSize: 13, fontWeight: 700 }}>
-                  Autenticação do vendedor:
-                </legend>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
-                    <label style={{ margin: 0, color: 'var(--text)' }}>E-mail / Login:</label>
-                    <input
-                      type="text"
-                      placeholder="email@dominio.com"
-                      value={emailLogin}
-                      onChange={(e) => setEmailLogin(e.target.value)}
-                      style={inputStyleGlobal}
-                    />
-                  </div>
-                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
-                    <label style={{ margin: 0, color: 'var(--text)' }}>Senha:</label>
-                    <input
-                      type="password"
-                      placeholder="Senha do vendedor..."
-                      value={senha}
-                      onChange={(e) => setSenha(e.target.value)}
-                      style={inputStyleGlobal}
-                    />
-                  </div>
-                </div>
-              </fieldset>
             </div>
           )}
 
@@ -2605,8 +2565,8 @@ export default function Venda() {
 
           <button
             type="button"
-            onClick={handleFinalizarVenda}
-            disabled={totalItensCarrinho === 0 || carregando || status !== 'ABERTA'}
+            onClick={handleSalvarVenda}
+            disabled={carregando || status !== 'ABERTA'}
             className="btn solid"
             style={{ 
               padding: '12px 26px', 
@@ -2616,10 +2576,10 @@ export default function Venda() {
               border: 'none',
               borderRadius: 8,
               fontWeight: 700,
-              cursor: totalItensCarrinho === 0 || carregando ? 'not-allowed' : 'pointer'
+              cursor: carregando ? 'not-allowed' : 'pointer'
             }}
           >
-            {carregando ? 'A gravar venda...' : 'Finalizar venda'}
+            {carregando ? 'A gravar venda...' : 'Salvar venda'}
           </button>
         </div>
       </div>
