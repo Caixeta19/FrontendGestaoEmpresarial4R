@@ -6,12 +6,13 @@ import { loginDoToken } from '../services/api';
 import { useToast } from '../components/ToastContext.jsx';
 import AuthModal from '../components/AuthModal.jsx';
 
-// Textos do modal de autenticação em cada mudança de status
+// A venda é lançada direto (CONCLUIDA): a única mudança de status pela tela é cancelar
 const ACOES_STATUS = {
-  APROVADA: { titulo: 'Aprovar venda', textoConfirmar: 'Aprovar venda' },
-  CONCLUIDA: { titulo: 'Concluir venda', textoConfirmar: 'Concluir venda' },
   CANCELADA: { titulo: 'Cancelar venda', textoConfirmar: 'Cancelar venda', textoFechar: 'Voltar' },
 };
+
+/** Selo do cabeçalho: CONCLUIDA aparece como LANÇADA. */
+const rotuloStatus = (status) => (status === 'CONCLUIDA' ? 'LANÇADA' : status);
 
 const rotuloCondicao = (condicao) => {
   if (condicao === 'PIX') return 'PIX';
@@ -1099,7 +1100,7 @@ export default function Venda() {
     setAcaoAutenticacao(acao);
   };
 
-  /** Aprovar / Concluir / Cancelar (cancelar devolve os IMEIs ao estoque). */
+  /** Cancelar a venda (aberta ou lançada) devolve os IMEIs/seriais ao estoque. */
   const handleMudarStatus = (novoStatus) => {
     if (vendaId) abrirAutenticacao(novoStatus);
   };
@@ -1195,13 +1196,7 @@ export default function Venda() {
 
       {vendaId && (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          {status === 'PENDENTE' && (
-            <button type="button" className="btn solid" disabled={carregando} onClick={() => handleMudarStatus('APROVADA')}>Aprovar</button>
-          )}
-          {status === 'APROVADA' && (
-            <button type="button" className="btn solid" disabled={carregando} onClick={() => handleMudarStatus('CONCLUIDA')}>Concluir</button>
-          )}
-          {status !== 'CANCELADA' && (
+          {(status === 'ABERTA' || status === 'CONCLUIDA') && (
             <button type="button" className="btn ghost" disabled={carregando} onClick={() => handleMudarStatus('CANCELADA')}>Cancelar venda</button>
           )}
         </div>
@@ -1224,7 +1219,7 @@ export default function Venda() {
           fontSize: 12,
           fontWeight: 700
         }}>
-          {status === 'ABERTA' ? 'ABERTA' : status}
+          {rotuloStatus(status)}
         </span>
       </div>
 
