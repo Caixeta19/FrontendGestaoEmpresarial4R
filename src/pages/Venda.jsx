@@ -393,6 +393,8 @@ export default function Venda() {
   const [saldoVenda, setSaldoVenda] = useState(null);           // saldo devolvido pelo backend (pode ser negativo)
   const [avisoVenda, setAvisoVenda] = useState('');             // aviso do backend (ex.: pagamentos acima do total)
   const [renovaAtivo, setRenovaAtivo] = useState(false);
+  const [codigoVoucherVenda, setCodigoVoucherVenda] = useState(null); // número gravado na venda (backend)
+  const [numeroVoucher, setNumeroVoucher] = useState('');       // campo "Número do voucher"
   const [descontoFabricante, setDescontoFabricante] = useState(null);
   const [renovaBloqueio, setRenovaBloqueio] = useState('');     // mensagem do backend ao recusar o Renova
   const [pagtoVenda, setPagtoVenda] = useState(PAGTO_VENDA_VAZIO); // condição e valores devolvidos pelo backend
@@ -495,8 +497,8 @@ export default function Venda() {
   const totalPagoAteAgora = totalAPagarCaixa - saldoBackend;
   const saldoRestante = Math.max(0, saldoBackend);
 
-  // Renova: precisa de voucher lançado e de aparelho com preço por plano
-  const temVoucher = pagamentos.some((p) => p.formaEnum === 'VOUCHER');
+  // Renova: precisa do número do voucher e de aparelho com preço por plano
+  const temVoucher = Boolean(codigoVoucherVenda);
   const temAparelhoRenova = itensPorCategoria.PRODUTO_VIVO.some((i) => i.grupoPlano && i.grupoPlano !== 'SEM_PLANO');
   useEffect(() => { setRenovaBloqueio(''); }, [itensPorCategoria]);
 
@@ -526,7 +528,7 @@ export default function Venda() {
         if (atual) setSimulacaoErro(e.mensagem || 'Falha ao simular o pagamento.');
       });
     return () => { atual = false; };
-  }, [abaAtiva, vendaId, itensPorCategoria, pagamentos, renovaAtivo]);
+  }, [abaAtiva, vendaId, itensPorCategoria, pagamentos, renovaAtivo, codigoVoucherVenda]);
 
   useEffect(() => {
     if (abaAtiva === 'PAGAMENTO') {
@@ -652,6 +654,7 @@ export default function Venda() {
     setSaldoVenda(tela.saldo);
     setAvisoVenda(tela.aviso || '');
     setRenovaAtivo(tela.renova);
+    setCodigoVoucherVenda(tela.codigoVoucher);
     setDescontoFabricante(tela.descontoFabricante);
     setPagtoVenda({
       condicaoPagamento: tela.condicaoPagamento,
@@ -665,6 +668,7 @@ export default function Venda() {
 
   const carregarVendaExistente = (v) => {
     aplicarVenda(v);
+    setNumeroVoucher(v.codigoVoucher || '');
     setCliente({ id: v.clienteId, nome: v.clienteNome, doc: '—' });
     setBuscaCliente(v.clienteNome);
     setPdvId(String(v.filialId));
@@ -677,6 +681,8 @@ export default function Venda() {
     setSaldoVenda(null);
     setAvisoVenda('');
     setRenovaAtivo(false);
+    setCodigoVoucherVenda(null);
+    setNumeroVoucher('');
     setDescontoFabricante(null);
     setRenovaBloqueio('');
     setPagtoVenda(PAGTO_VENDA_VAZIO);
@@ -916,14 +922,19 @@ export default function Venda() {
   /** Liga/desliga o Renova no backend; a venda volta reprecificada (nada é calculado no front). */
   const handleAplicarRenova = async (ativo) => {
     if (!vendaId) return;
+    const numero = numeroVoucher.trim();
+    if (ativo && !numero) return;
     setErro('');
     setRenovaBloqueio('');
     setCarregando(true);
     try {
-      aplicarVenda(await api.aplicarRenova(vendaId, ativo));
+      const v = await api.aplicarRenova(vendaId, ativo, ativo ? numero : undefined);
+      aplicarVenda(v);
+      setNumeroVoucher(v.codigoVoucher || '');
     } catch (e) {
       const msg = e.mensagem || e.message || 'Falha ao aplicar o Renova.';
-      if (e.status === 422) setRenovaBloqueio(msg); // ex.: "Renova não disponível para plano pré-pago."
+      // 409: "Voucher já usado na venda #id"; 422: ex.: "Renova não disponível para plano pré-pago."
+      if (e.status === 409 || e.status === 422) setRenovaBloqueio(msg);
       else setErro(msg);
     } finally {
       setCarregando(false);
@@ -2338,31 +2349,48 @@ export default function Venda() {
                 </div>
               )}
 
-              {/* Renova: Desconto fabricante (do backend) + Voucher (pagamento) */}
+              {/* Renova: número do voucher + desconto fabricante (do backend) */}
               <fieldset style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '14px 18px', maxWidth: 840, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <legend style={{ padding: '0 8px', color: 'var(--accent, #a855f7)', fontSize: 13, fontWeight: 700 }}>Renova</legend>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16 }}>
-                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Desconto fabricante:</label>
-                  <div style={{ fontSize: 13 }}>
-                    <span className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>
-                      {renovaAtivo ? formatadorMoeda.format(descontoFabricante || 0) : '—'}
-                    </span>
-                    <span style={{ color: 'var(--text-faint)', marginLeft: 8 }}>
-                      {renovaAtivo ? '(já embutido no preço Renova dos aparelhos)' : '(preenchido pelo sistema ao aplicar o Renova)'}
-                    </span>
-                  </div>
+                  <label htmlFor="numero-voucher" style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Número do voucher:</label>
+                  {renovaAtivo ? (
+                    temVoucher ? (
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{codigoVoucherVenda}</span>
+                    ) : (
+                      <span style={{ fontSize: 12.5, color: COR_SEM_PRECO, fontWeight: 600 }}>
+                        Venda com Renova sem número do voucher: remova o Renova e aplique de novo com o número.
+                      </span>
+                    )
+                  ) : (
+                    <input
+                      id="numero-voucher"
+                      type="text"
+                      maxLength={60}
+                      placeholder="Digite o número do voucher..."
+                      value={numeroVoucher}
+                      disabled={!vendaEditavel}
+                      onChange={(e) => {
+                        setNumeroVoucher(e.target.value);
+                        setRenovaBloqueio('');
+                      }}
+                      style={{ ...inputStyleGlobal, maxWidth: 280 }}
+                    />
+                  )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16 }}>
-                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Voucher:</label>
-                  <span style={{ fontSize: 13, color: temVoucher ? 'var(--text)' : 'var(--text-faint)' }}>
-                    {temVoucher
-                      ? pagamentos.filter((p) => p.formaEnum === 'VOUCHER')
-                        .map((p) => `${p.codigoVoucher || 's/ código'} (${formatadorMoeda.format(p.valor)})`).join(' · ')
-                      : 'Lance o voucher acima, na forma de pagamento "Voucher".'}
-                  </span>
-                </div>
+                {renovaAtivo && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16 }}>
+                    <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Desconto fabricante:</label>
+                    <div style={{ fontSize: 13 }}>
+                      <span className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>
+                        {formatadorMoeda.format(descontoFabricante || 0)}
+                      </span>
+                      <span style={{ color: 'var(--text-faint)', marginLeft: 8 }}>(já embutido no preço Renova)</span>
+                    </div>
+                  </div>
+                )}
 
                 {itensPorCategoria.PRODUTO_VIVO.length > 0 && (
                   <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'start', gap: 16 }}>
@@ -2381,24 +2409,33 @@ export default function Venda() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'start', gap: 16 }}>
                   <div />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, margin: 0, fontSize: 13, color: 'var(--text)', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={renovaAtivo}
-                        disabled={carregando || !vendaId || (!renovaAtivo && (!temVoucher || !temAparelhoRenova || Boolean(renovaBloqueio)))}
-                        onChange={(e) => handleAplicarRenova(e.target.checked)}
-                      />
-                      <b>Aplicar Renova</b>
-                    </label>
-                    {renovaBloqueio ? (
-                      <span style={{ fontSize: 12.5, color: COR_SEM_PRECO, fontWeight: 600 }}>{renovaBloqueio}</span>
-                    ) : !renovaAtivo && !temAparelhoRenova ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                    {renovaBloqueio && (
+                      <span role="alert" style={{ fontSize: 12.5, color: 'var(--bad, #ef4444)', fontWeight: 600 }}>{renovaBloqueio}</span>
+                    )}
+                    {renovaAtivo ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={carregando || !vendaEditavel}
+                        onClick={() => handleAplicarRenova(false)}
+                      >
+                        Remover Renova
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn solid"
+                        disabled={carregando || !vendaEditavel || !temAparelhoRenova || !numeroVoucher.trim()}
+                        onClick={() => handleAplicarRenova(true)}
+                      >
+                        Aplicar Renova
+                      </button>
+                    )}
+                    {renovaAtivo ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Remover o Renova limpa o número e os aparelhos voltam para a Regular.</span>
+                    ) : !temAparelhoRenova ? (
                       <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Adicione um aparelho com plano para usar o Renova.</span>
-                    ) : !renovaAtivo && !temVoucher ? (
-                      <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Exige um pagamento por voucher.</span>
-                    ) : renovaAtivo ? (
-                      <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Remover o voucher desliga o Renova e os aparelhos voltam para a Regular.</span>
                     ) : null}
                   </div>
                 </div>
