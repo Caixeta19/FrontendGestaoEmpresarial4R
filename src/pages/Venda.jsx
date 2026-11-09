@@ -2,7 +2,22 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Pencil, Plus, Trash2, CheckCircle, HelpCircle, X, Check } from 'lucide-react';
 import * as api from '../services/vendasApi';
+import { loginDoToken } from '../services/api';
 import { useToast } from '../components/ToastContext.jsx';
+import AuthModal from '../components/AuthModal.jsx';
+
+// Textos do modal de autenticação em cada mudança de status
+const ACOES_STATUS = {
+  APROVADA: { titulo: 'Aprovar venda', textoConfirmar: 'Aprovar venda' },
+  CONCLUIDA: { titulo: 'Concluir venda', textoConfirmar: 'Concluir venda' },
+  CANCELADA: { titulo: 'Cancelar venda', textoConfirmar: 'Cancelar venda', textoFechar: 'Voltar' },
+};
+
+const rotuloCondicao = (condicao) => {
+  if (condicao === 'PIX') return 'PIX';
+  if (condicao === 'A_VISTA') return 'À vista';
+  return api.ehParcelado(condicao) ? `${String(condicao).replace('PARCELADO_', '')}x` : '—';
+};
 
 const CATEGORIAS_ITENS = [
   { id: 'PRODUTO_VIVO', rotulo: 'Produto Vivo' },
@@ -385,14 +400,20 @@ export default function Venda() {
   const [status, setStatus] = useState('ABERTA');
   const [carregando, setCarregando] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState('');
+  const timerSucessoRef = useRef(null);
+  useEffect(() => () => clearTimeout(timerSucessoRef.current), []);
 
-  // Identificação e Vendedor
+  /** Cancela o timer da mensagem anterior, que apagaria esta antes da hora. */
+  const mostrarSucesso = (mensagem, duracaoMs = 5000) => {
+    clearTimeout(timerSucessoRef.current);
+    setMensagemSucesso(mensagem);
+    timerSucessoRef.current = setTimeout(() => setMensagemSucesso(''), duracaoMs);
+  };
+
+  // Identificação
   const [pdvId, setPdvId] = useState('');
-  const [vendedorId, setVendedorId] = useState('');
   const [cliente, setCliente] = useState(null);
   const [buscaCliente, setBuscaCliente] = useState('');
-  const [emailLogin, setEmailLogin] = useState('');
-  const [senha, setSenha] = useState('');
 
   const showToast = useToast();
 
@@ -414,6 +435,9 @@ export default function Venda() {
   const [filiais, setFiliais] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [erro, setErro] = useState('');
+  const [acaoAutenticacao, setAcaoAutenticacao] = useState(null); // ação à espera da senha; null = modal fechado
+  const [erroAutenticacao, setErroAutenticacao] = useState('');
+  const [autenticando, setAutenticando] = useState(false);
   const [clientesSugeridos, setClientesSugeridos] = useState([]);
   const [aparelhosSugeridos, setAparelhosSugeridos] = useState([]);
   const [acessoriosSugeridos, setAcessoriosSugeridos] = useState([]);
@@ -625,7 +649,6 @@ export default function Venda() {
   // =========================================================================
   const num = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Math.round(Number(v) * 100) / 100);
   const sim = (v) => v === true || v === 'Sim';
-  const credenciais = () => ({ email: emailLogin.trim(), senha });
 
   const executar = async (fn) => {
     setErro('');
@@ -692,22 +715,14 @@ export default function Venda() {
     setPagamentos([]);
     setPgtoForm((prev) => ({ ...prev, valor: '' }));
     setItensPorCategoria({ PRODUTO_VIVO: [], SERVICO_VIVO: [], ACESSORIO: [], RECARGA: [] });
-    setSenha('');
     setAbaAtiva('INICIO');
     inicioSalvoRef.current = { clienteId: null, filialId: null };
-  };
-
-  const handleSelecionarVendedor = (id) => {
-    setVendedorId(id);
-    const v = vendedores.find((x) => String(x.id) === String(id));
-    setEmailLogin(v?.email || '');
   };
 
   /** Abre o carrinho no backend na primeira ação (ou sincroniza cliente/PDV se mudaram). Devolve o id da venda. */
   const garantirVenda = async () => {
     if (!pdvId) throw new Error('Selecione o PDV na aba Início.');
     if (!cliente?.id) throw new Error('Selecione um cliente cadastrado na aba Início.');
-    if (!emailLogin.trim() || !senha) throw new Error('Informe o e-mail e a senha do vendedor na aba Início.');
 
     const filialId = Number(pdvId);
     if (!vendaId) {
@@ -715,7 +730,6 @@ export default function Venda() {
         clienteId: cliente.id,
         filialId,
         estoqueAvancado: false,
-        autenticacaoVendedor: credenciais(),
       });
       inicioSalvoRef.current = { clienteId: cliente.id, filialId };
       aplicarVenda(v);
@@ -728,7 +742,6 @@ export default function Venda() {
         clienteId: cliente.id,
         filialId,
         estoqueAvancado: false,
-        autenticacaoUsuario: credenciais(),
       });
       inicioSalvoRef.current = { clienteId: cliente.id, filialId };
       aplicarVenda(v);
@@ -749,8 +762,7 @@ export default function Venda() {
     if (!item) return;
     const extra = [item.tabelaAplicada && api.rotuloTabela(item.tabelaAplicada), item.grupoPlano && api.rotuloGrupo(item.grupoPlano)]
       .filter(Boolean).join(' · ');
-    setMensagemSucesso(`${rotulo} adicionado: ${api.formatarMoeda(item.valorUnitario)}${extra ? ` (${extra})` : ''}.`);
-    setTimeout(() => setMensagemSucesso(''), 5000);
+    mostrarSucesso(`${rotulo} adicionado: ${api.formatarMoeda(item.valorUnitario)}${extra ? ` (${extra})` : ''}.`);
   };
 
   const formServicoVazio = () => ({
@@ -808,8 +820,7 @@ export default function Venda() {
         serialConfirmado: !!servicoForm.serialConfirmado
       });
       if (gravado?.valorChip != null) {
-        setMensagemSucesso(`Serviço adicionado. Chip: ${api.formatarMoeda(gravado.valorChip)}.`);
-        setTimeout(() => setMensagemSucesso(''), 5000);
+        mostrarSucesso(`Serviço adicionado. Chip: ${api.formatarMoeda(gravado.valorChip)}.`);
       }
       setServicoForm(formServicoVazio());
     });
@@ -972,58 +983,106 @@ export default function Venda() {
     executar(async () => aplicarVenda(await api.removerPagamento(vendaId, id)));
   };
 
-  const handleFinalizarVenda = () => {
+  const recusarSalvar = (mensagem, aba) => {
+    showToast(mensagem, true);
+    setAbaAtiva(aba);
+  };
+
+  /** Confere se a venda pode ser fechada e só então pede a autenticação do vendedor. */
+  const handleSalvarVenda = () => {
+    if (!cliente?.id || !pdvId) {
+      recusarSalvar('Selecione o cliente e o PDV na aba Início.', 'INICIO');
+      return;
+    }
     if (totalItensCarrinho === 0) {
-      showToast('Adicione pelo menos um item ao carrinho antes de finalizar a venda.', true);
+      recusarSalvar('Adicione pelo menos um item ao carrinho.', 'PRODUTO_VIVO');
       return;
     }
     if (avisoVenda) {
-      showToast(avisoVenda, true);
-      setAbaAtiva('PAGAMENTO');
+      recusarSalvar(avisoVenda, 'PAGAMENTO');
+      return;
+    }
+    if (Math.abs(saldoBackend) >= 0.005) {
+      recusarSalvar(`Os pagamentos precisam fechar o total da venda: saldo de ${formatadorMoeda.format(saldoBackend)}.`, 'PAGAMENTO');
+      return;
+    }
+    if (renovaAtivo && !temVoucher) {
+      recusarSalvar('Informe o número do voucher do Renova.', 'PAGAMENTO');
       return;
     }
     executar(async () => {
-      const id = await garantirVenda();
-      let v;
-      try {
-        v = await api.finalizar(id, credenciais());
-      } catch (e) {
-        if (e.status !== 422) throw e;
-        // O 422 pode ser o total reprecificado: recarrega para mostrar os valores atuais e mantém a mensagem na tela
-        try {
-          aplicarVenda(await api.buscarVenda(id));
-        } catch {
-          // Falhou só a recarga: a mensagem do finalizar continua sendo a informação principal
-        }
-        setErro(e.mensagem || 'Não foi possível finalizar a venda.');
-        setAbaAtiva('PAGAMENTO');
-        return;
-      }
-      const numero = String(v.numeroVenda).padStart(6, '0');
-      resetarTela();
-      setMensagemSucesso(`Venda #${numero} finalizada e enviada para aprovação (status ${v.status}).`);
-      setTimeout(() => setMensagemSucesso(''), 6000);
+      await garantirVenda();
+      abrirAutenticacao('FINALIZAR');
     });
+  };
+
+  const confirmarFinalizacao = async (credenciaisModal) => {
+    let v;
+    try {
+      v = await api.finalizar(vendaId, credenciaisModal);
+    } catch (e) {
+      if (e.status !== 422) throw e;
+      // O 422 pode ser o total reprecificado: recarrega para mostrar os valores atuais e mantém a mensagem na tela
+      setAcaoAutenticacao(null);
+      try {
+        aplicarVenda(await api.buscarVenda(vendaId));
+      } catch {
+        // Falhou só a recarga: a mensagem do finalizar continua sendo a informação principal
+      }
+      setErro(e.mensagem || 'Não foi possível finalizar a venda.');
+      setAbaAtiva('PAGAMENTO');
+      return;
+    }
+    const numero = String(v.numeroVenda).padStart(6, '0');
+    setAcaoAutenticacao(null);
+    resetarTela();
+    mostrarSucesso(`Venda #${numero} finalizada por ${v.finalizadoPorNome || v.vendedorNome} e enviada para aprovação.`, 6000);
+  };
+
+  const abrirAutenticacao = (acao) => {
+    setErroAutenticacao('');
+    setAcaoAutenticacao(acao);
   };
 
   /** Aprovar / Concluir / Cancelar (cancelar devolve os IMEIs ao estoque). */
   const handleMudarStatus = (novoStatus) => {
-    if (!vendaId) return;
-    if (!emailLogin.trim() || !senha) {
-      setErro('Informe o e-mail e a senha do vendedor na aba Início para alterar o status.');
-      setAbaAtiva('INICIO');
-      return;
-    }
-    if (novoStatus === 'CANCELADA' && !window.confirm('Cancelar esta venda? Os IMEIs/seriais voltam ao estoque.')) return;
-    executar(async () => {
-      const v = await api.mudarStatus(vendaId, novoStatus, credenciais());
-      const numero = String(v.numeroVenda).padStart(6, '0');
-      if (novoStatus === 'CANCELADA') resetarTela();
-      else aplicarVenda(v);
-      setMensagemSucesso(`Venda #${numero}: status alterado para ${v.status}.`);
-      setTimeout(() => setMensagemSucesso(''), 5000);
-    });
+    if (vendaId) abrirAutenticacao(novoStatus);
   };
+
+  const confirmarMudancaStatus = async (novoStatus, credenciaisModal) => {
+    const v = await api.mudarStatus(vendaId, novoStatus, credenciaisModal);
+    const numero = String(v.numeroVenda).padStart(6, '0');
+    setAcaoAutenticacao(null);
+    if (novoStatus === 'CANCELADA') resetarTela();
+    else aplicarVenda(v);
+    mostrarSucesso(`Venda #${numero}: status alterado para ${v.status}.`);
+  };
+
+  /** 401 e falhas inesperadas ficam no modal, que continua aberto; 422 é regra da venda e volta para a tela. */
+  const handleConfirmarAutenticacao = async (credenciaisModal) => {
+    setErro('');
+    setErroAutenticacao('');
+    setAutenticando(true);
+    try {
+      if (acaoAutenticacao === 'FINALIZAR') await confirmarFinalizacao(credenciaisModal);
+      else await confirmarMudancaStatus(acaoAutenticacao, credenciaisModal);
+    } catch (e) {
+      const msg = e.mensagem || e.message || 'Falha ao comunicar com o servidor.';
+      if (e.status === 422) {
+        setAcaoAutenticacao(null);
+        setErro(msg);
+      } else {
+        setErroAutenticacao(msg);
+      }
+    } finally {
+      setAutenticando(false);
+    }
+  };
+
+  const vendedorLogadoId = useMemo(() => {
+    const login = loginDoToken()?.toLowerCase();
+    return vendedores.find((v) => login && v.login?.toLowerCase() === login)?.id ?? null;
+  }, [vendedores]);
 
   return (
     <div style={{ 
@@ -1167,20 +1226,6 @@ export default function Venda() {
                 </select>
               </div>
 
-              <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Vendedor:</label>
-                <select 
-                  value={vendedorId} 
-                  onChange={(e) => handleSelecionarVendedor(e.target.value)} 
-                  style={{ ...inputStyleGlobal, width: '100%', maxWidth: 760 }}
-                >
-                  <option value="">Escolha...</option>
-                  {vendedores.map((v) => (
-                    <option key={v.id} value={v.id}>{v.nome}</option>
-                  ))}
-                </select>
-              </div>
-
               <div className="field" style={{ display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'start', gap: 16, margin: 0 }}>
                 <label style={{ marginTop: 10, fontWeight: 600, color: 'var(--text)' }}>Cliente:</label>
                 <div style={{ position: 'relative', width: '100%', maxWidth: 760 }}>
@@ -1245,42 +1290,6 @@ export default function Venda() {
                 </div>
               </div>
 
-              <fieldset style={{ 
-                borderRadius: 8, 
-                padding: '18px 24px', 
-                marginTop: 12, 
-                border: '1px solid var(--line)', 
-                background: 'var(--panel-2)',
-                width: '100%', 
-                maxWidth: 760, 
-                boxSizing: 'border-box' 
-              }}>
-                <legend style={{ padding: '0 8px', color: 'var(--accent, #c026d3)', fontSize: 13, fontWeight: 700 }}>
-                  Autenticação do vendedor:
-                </legend>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
-                    <label style={{ margin: 0, color: 'var(--text)' }}>E-mail / Login:</label>
-                    <input
-                      type="text"
-                      placeholder="email@dominio.com"
-                      value={emailLogin}
-                      onChange={(e) => setEmailLogin(e.target.value)}
-                      style={inputStyleGlobal}
-                    />
-                  </div>
-                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
-                    <label style={{ margin: 0, color: 'var(--text)' }}>Senha:</label>
-                    <input
-                      type="password"
-                      placeholder="Senha do vendedor..."
-                      value={senha}
-                      onChange={(e) => setSenha(e.target.value)}
-                      style={inputStyleGlobal}
-                    />
-                  </div>
-                </div>
-              </fieldset>
             </div>
           )}
 
@@ -2561,8 +2570,8 @@ export default function Venda() {
 
           <button
             type="button"
-            onClick={handleFinalizarVenda}
-            disabled={totalItensCarrinho === 0 || carregando || status !== 'ABERTA'}
+            onClick={handleSalvarVenda}
+            disabled={carregando || status !== 'ABERTA'}
             className="btn solid"
             style={{ 
               padding: '12px 26px', 
@@ -2572,13 +2581,36 @@ export default function Venda() {
               border: 'none',
               borderRadius: 8,
               fontWeight: 700,
-              cursor: totalItensCarrinho === 0 || carregando ? 'not-allowed' : 'pointer'
+              cursor: carregando ? 'not-allowed' : 'pointer'
             }}
           >
-            {carregando ? 'A gravar venda...' : 'Finalizar venda'}
+            {carregando ? 'A gravar venda...' : 'Salvar venda'}
           </button>
         </div>
       </div>
+
+      <AuthModal
+        open={Boolean(acaoAutenticacao)}
+        {...ACOES_STATUS[acaoAutenticacao]}
+        vendedores={vendedores}
+        vendedorInicial={vendedorLogadoId}
+        onConfirmar={handleConfirmarAutenticacao}
+        onClose={() => setAcaoAutenticacao(null)}
+        erro={erroAutenticacao}
+        carregando={autenticando}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 12px', fontSize: 13, margin: '10px 0 16px' }}>
+          <span style={{ color: 'var(--text-faint)' }}>Total</span>
+          <b className="mono">{formatadorMoeda.format(totalAPagarCaixa)}</b>
+          <span style={{ color: 'var(--text-faint)' }}>Condição</span>
+          <b>{rotuloCondicao(condicaoVenda)}</b>
+          <span style={{ color: 'var(--text-faint)' }}>Itens</span>
+          <b>{totalItensCarrinho}</b>
+        </div>
+        {acaoAutenticacao === 'CANCELADA' && (
+          <p>Os IMEIs/seriais desta venda voltam ao estoque.</p>
+        )}
+      </AuthModal>
     </div>
   );
 }

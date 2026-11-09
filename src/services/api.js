@@ -15,6 +15,18 @@ function lerJson(texto) {
   try { return JSON.parse(texto); } catch { return null; }
 }
 
+/** Login do usuário logado (subject do JWT), só para a tela; quem valida o token é o backend. */
+export function loginDoToken() {
+  try {
+    const payload = lerToken()?.split('.')[1];
+    if (!payload) return null;
+    const bytes = Uint8Array.from(atob(payload.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+    return lerJson(new TextDecoder().decode(bytes))?.sub || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Lê o token JWT sem quebrar a requisição se o storage estiver com valor inválido. */
 function lerToken() {
   try {
