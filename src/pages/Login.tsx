@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ToastContext.jsx';
 import { login } from '../services/vendasApi';
+import { consumirAvisoSessaoExpirada } from '../services/api';
 
 export default function Login({ setSession }) {
   const [filial, setFilial] = useState('Valparaíso de Goiás — Matriz');
@@ -10,6 +11,10 @@ export default function Login({ setSession }) {
   const [showPass, setShowPass] = useState(false);
   const navigate = useNavigate();
   const showToast = useToast();
+
+  useEffect(() => {
+    if (consumirAvisoSessaoExpirada()) showToast('Sua sessão expirou. Entre novamente.', true);
+  }, [showToast]);
 
   async function entrar() {
     if (!user.trim() || !pass.trim()) {

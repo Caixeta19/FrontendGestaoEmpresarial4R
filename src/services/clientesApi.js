@@ -1,10 +1,11 @@
 import { clientesDemo } from '../data/demoData';
+import { encerrarSessaoExpirada, lerToken } from './api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 const DEMO = import.meta.env.VITE_DEMO_MODE === 'true';
 
 async function http(path, options = {}) {
-  const token = localStorage.getItem('syscor_token');
+  const token = lerToken();
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -14,6 +15,7 @@ async function http(path, options = {}) {
     },
   });
   if (!res.ok) {
+    if (res.status === 401) encerrarSessaoExpirada();
     const body = await res.json().catch(() => ({}));
     const err = new Error(body.message || `Erro ${res.status}`);
     err.status = res.status;

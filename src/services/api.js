@@ -15,6 +15,38 @@ function lerJson(texto) {
   try { return JSON.parse(texto); } catch { return null; }
 }
 
+const CHAVE_SESSAO_EXPIRADA = 'syscor_sessao_expirada';
+let encerrandoSessao = false;
+
+/**
+ * Sessão inválida: limpa o token e volta para o login, avisando o motivo. Recarrega a página porque a sessão também
+ * fica no estado do App, e a rota de login devolveria para a tela inicial enquanto ela existisse.
+ */
+export function encerrarSessaoExpirada() {
+  if (encerrandoSessao) return;
+  encerrandoSessao = true;
+  try {
+    sessionStorage.removeItem('syscor_session');
+    localStorage.removeItem('syscor_token');
+    sessionStorage.setItem(CHAVE_SESSAO_EXPIRADA, '1');
+  } catch {
+    // storage indisponível: o redirecionamento continua valendo
+  }
+  window.location.hash = '#/login';
+  window.location.reload();
+}
+
+/** Devolve true uma única vez, se o usuário acabou de ser levado ao login por sessão expirada. */
+export function consumirAvisoSessaoExpirada() {
+  try {
+    const expirou = sessionStorage.getItem(CHAVE_SESSAO_EXPIRADA) === '1';
+    sessionStorage.removeItem(CHAVE_SESSAO_EXPIRADA);
+    return expirou;
+  } catch {
+    return false;
+  }
+}
+
 /** Login do usuário logado (subject do JWT), só para a tela; quem valida o token é o backend. */
 export function loginDoToken() {
   try {
@@ -28,7 +60,7 @@ export function loginDoToken() {
 }
 
 /** Lê o token JWT sem quebrar a requisição se o storage estiver com valor inválido. */
-function lerToken() {
+export function lerToken() {
   try {
     const direto = localStorage.getItem('syscor_token');
     if (direto) return direto;
@@ -80,6 +112,10 @@ export async function request(path, { method = 'GET', body, params } = {}) {
   const dados = texto ? lerJson(texto) : null;
 
   if (!resp.ok) {
+    // 401 sem corpo = token ausente, inválido, expirado ou usuário inativado. Senha errada do vendedor e login
+    // recusado também são 401, mas trazem a mensagem no corpo e são tratados por quem chamou.
+    if (resp.status === 401 && !dados) encerrarSessaoExpirada();
+
     const detalhes = dados?.campos ? Object.values(dados.campos).join(' · ') : '';
     let mensagem = [dados?.mensagem, detalhes].filter(Boolean).join(' — ');
 
