@@ -1,4 +1,4 @@
-import { API_BASE } from './api';
+import { API_BASE, encerrarSessaoExpirada } from './api';
 
 // API_BASE já termina em /api (context-path do back). Aqui entram só os caminhos
 // depois dele: /v1/contas-pagar -> http://localhost:8080/api/v1/contas-pagar.
@@ -17,6 +17,7 @@ function cabecalhos(extra = {}) {
 
 async function get(path) {
   const r = await fetch(API_BASE + path, { headers: cabecalhos() });
+  if (r.status === 401) encerrarSessaoExpirada();
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
