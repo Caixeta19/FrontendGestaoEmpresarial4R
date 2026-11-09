@@ -1,41 +1,87 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-export default function AuthModal({ open, onClose, onConfirm }) {
-  const [pass, setPass] = useState('');
+/**
+ * Autenticação do vendedor para finalizar a venda ou mudar o status. A senha fica só no estado deste componente e é
+ * limpa ao fechar. `children` é o resumo da operação, mostrado acima dos campos.
+ */
+export default function AuthModal({
+  open,
+  titulo = 'Autenticação do vendedor',
+  textoConfirmar = 'Finalizar venda',
+  textoFechar = 'Cancelar',
+  vendedores = [],
+  vendedorInicial = null,
+  onConfirmar,
+  onClose,
+  erro = '',
+  carregando = false,
+  children,
+}) {
+  const [vendedorId, setVendedorId] = useState('');
+  const [senha, setSenha] = useState('');
+
+  useEffect(() => {
+    if (!open) setSenha('');
+  }, [open]);
+
+  useEffect(() => {
+    setVendedorId(open && vendedorInicial != null ? String(vendedorInicial) : '');
+  }, [open, vendedorInicial]);
 
   if (!open) return null;
 
+  const vendedor = vendedores.find((v) => String(v.id) === vendedorId);
+  const podeConfirmar = Boolean(vendedor && senha) && !carregando;
+
+  const confirmar = (e) => {
+    e.preventDefault();
+    if (podeConfirmar) onConfirmar({ email: vendedor.email || vendedor.login, senha });
+  };
+
   return (
     <div className="modal-overlay show">
-      <div className="modal">
-        <h3>Autenticação do vendedor</h3>
-        <p>Confirme sua senha para aplicar descontos ou alterações sensíveis nesta venda.</p>
+      <form className="modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-titulo" onSubmit={confirmar}>
+        <h3 id="auth-modal-titulo">{titulo}</h3>
+        {children}
         <div className="field">
-          <label>Vendedor</label>
-          <input type="text" value="Guilherme Caixeta" disabled />
+          <label htmlFor="auth-modal-vendedor">Vendedor</label>
+          <select
+            id="auth-modal-vendedor"
+            value={vendedorId}
+            disabled={carregando}
+            onChange={(e) => setVendedorId(e.target.value)}
+          >
+            <option value="">Escolha...</option>
+            {vendedores.map((v) => (
+              <option key={v.id} value={v.id}>{v.nome}</option>
+            ))}
+          </select>
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
-          <label>Senha</label>
+          <label htmlFor="auth-modal-senha">Senha</label>
           <input
+            id="auth-modal-senha"
             type="password"
             placeholder="••••••••"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
+            autoComplete="new-password"
+            autoFocus
+            value={senha}
+            disabled={carregando}
+            onChange={(e) => setSenha(e.target.value)}
           />
         </div>
+        {erro && (
+          <div role="alert" style={{ color: 'var(--bad, #ef4444)', fontSize: 13, fontWeight: 600, marginTop: 12 }}>
+            {erro}
+          </div>
+        )}
         <div className="modal-actions">
-          <button className="btn ghost" onClick={onClose}>Cancelar</button>
-          <button
-            className="btn solid"
-            onClick={() => {
-              onConfirm();
-              setPass('');
-            }}
-          >
-            Confirmar
+          <button type="button" className="btn ghost" disabled={carregando} onClick={onClose}>{textoFechar}</button>
+          <button type="submit" className="btn solid" disabled={!podeConfirmar}>
+            {carregando ? 'Aguarde...' : textoConfirmar}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
