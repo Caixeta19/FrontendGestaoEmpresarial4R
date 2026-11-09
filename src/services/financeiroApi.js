@@ -1,7 +1,7 @@
 import { API_BASE, encerrarSessaoExpirada } from './api';
 
 // API_BASE já termina em /api (context-path do back). Aqui entram só os caminhos
-// depois dele: /v1/contas-pagar -> http://localhost:8080/api/v1/contas-pagar.
+// depois dele: /financeiro/contas-pagar -> http://localhost:8080/api/financeiro/contas-pagar.
 
 function token() {
   return (
@@ -22,10 +22,10 @@ async function get(path) {
   return r.json();
 }
 
-export const listarContasPagar = () => get('/v1/contas-pagar');
-export const listarLogs = (tamanho = 50) => get(`/v1/conciliacao/logs?tamanho=${tamanho}`);
+export const listarContasPagar = () => get('/financeiro/contas-pagar');
+export const listarLogs = (tamanho = 50) => get(`/financeiro/conciliacao/logs?tamanho=${tamanho}`);
 export const reprocessarLog = (id) =>
-  fetch(`${API_BASE}/v1/conciliacao/logs/${id}/reprocessar`, {
+  fetch(`${API_BASE}/financeiro/conciliacao/logs/${id}/reprocessar`, {
     method: 'POST',
     headers: cabecalhos(),
   });
@@ -40,7 +40,7 @@ export function assinarConciliacao(onEvento) {
 
   (async () => {
     try {
-      const r = await fetch(`${API_BASE}/v1/conciliacao/stream`, {
+      const r = await fetch(`${API_BASE}/financeiro/conciliacao/stream`, {
         headers: cabecalhos({ Accept: 'text/event-stream' }),
         signal: ctrl.signal,
       });
