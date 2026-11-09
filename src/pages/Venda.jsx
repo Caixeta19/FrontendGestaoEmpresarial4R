@@ -2,7 +2,22 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Pencil, Plus, Trash2, CheckCircle, HelpCircle, X, Check } from 'lucide-react';
 import * as api from '../services/vendasApi';
+import { loginDoToken } from '../services/api';
 import { useToast } from '../components/ToastContext.jsx';
+import AuthModal from '../components/AuthModal.jsx';
+
+// Textos do modal de autenticação em cada mudança de status
+const ACOES_STATUS = {
+  APROVADA: { titulo: 'Aprovar venda', textoConfirmar: 'Aprovar venda' },
+  CONCLUIDA: { titulo: 'Concluir venda', textoConfirmar: 'Concluir venda' },
+  CANCELADA: { titulo: 'Cancelar venda', textoConfirmar: 'Cancelar venda', textoFechar: 'Voltar' },
+};
+
+const rotuloCondicao = (condicao) => {
+  if (condicao === 'PIX') return 'PIX';
+  if (condicao === 'A_VISTA') return 'À vista';
+  return api.ehParcelado(condicao) ? `${String(condicao).replace('PARCELADO_', '')}x` : '—';
+};
 
 const CATEGORIAS_ITENS = [
   { id: 'PRODUTO_VIVO', rotulo: 'Produto Vivo' },
@@ -414,6 +429,9 @@ export default function Venda() {
   const [filiais, setFiliais] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [erro, setErro] = useState('');
+  const [acaoAutenticacao, setAcaoAutenticacao] = useState(null); // ação à espera da senha; null = modal fechado
+  const [erroAutenticacao, setErroAutenticacao] = useState('');
+  const [autenticando, setAutenticando] = useState(false);
   const [clientesSugeridos, setClientesSugeridos] = useState([]);
   const [aparelhosSugeridos, setAparelhosSugeridos] = useState([]);
   const [acessoriosSugeridos, setAcessoriosSugeridos] = useState([]);
@@ -1006,24 +1024,50 @@ export default function Venda() {
     });
   };
 
+  const abrirAutenticacao = (acao) => {
+    setErroAutenticacao('');
+    setAcaoAutenticacao(acao);
+  };
+
   /** Aprovar / Concluir / Cancelar (cancelar devolve os IMEIs ao estoque). */
   const handleMudarStatus = (novoStatus) => {
-    if (!vendaId) return;
-    if (!emailLogin.trim() || !senha) {
-      setErro('Informe o e-mail e a senha do vendedor na aba Início para alterar o status.');
-      setAbaAtiva('INICIO');
-      return;
-    }
-    if (novoStatus === 'CANCELADA' && !window.confirm('Cancelar esta venda? Os IMEIs/seriais voltam ao estoque.')) return;
-    executar(async () => {
-      const v = await api.mudarStatus(vendaId, novoStatus, credenciais());
-      const numero = String(v.numeroVenda).padStart(6, '0');
-      if (novoStatus === 'CANCELADA') resetarTela();
-      else aplicarVenda(v);
-      setMensagemSucesso(`Venda #${numero}: status alterado para ${v.status}.`);
-      setTimeout(() => setMensagemSucesso(''), 5000);
-    });
+    if (vendaId) abrirAutenticacao(novoStatus);
   };
+
+  const confirmarMudancaStatus = async (novoStatus, credenciaisModal) => {
+    const v = await api.mudarStatus(vendaId, novoStatus, credenciaisModal);
+    const numero = String(v.numeroVenda).padStart(6, '0');
+    setAcaoAutenticacao(null);
+    if (novoStatus === 'CANCELADA') resetarTela();
+    else aplicarVenda(v);
+    setMensagemSucesso(`Venda #${numero}: status alterado para ${v.status}.`);
+    setTimeout(() => setMensagemSucesso(''), 5000);
+  };
+
+  /** 401 e falhas inesperadas ficam no modal, que continua aberto; 422 é regra da venda e volta para a tela. */
+  const handleConfirmarAutenticacao = async (credenciaisModal) => {
+    setErro('');
+    setErroAutenticacao('');
+    setAutenticando(true);
+    try {
+      await confirmarMudancaStatus(acaoAutenticacao, credenciaisModal);
+    } catch (e) {
+      const msg = e.mensagem || e.message || 'Falha ao comunicar com o servidor.';
+      if (e.status === 422) {
+        setAcaoAutenticacao(null);
+        setErro(msg);
+      } else {
+        setErroAutenticacao(msg);
+      }
+    } finally {
+      setAutenticando(false);
+    }
+  };
+
+  const vendedorLogadoId = useMemo(() => {
+    const login = loginDoToken()?.toLowerCase();
+    return vendedores.find((v) => login && v.login?.toLowerCase() === login)?.id ?? null;
+  }, [vendedores]);
 
   return (
     <div style={{ 
@@ -2579,6 +2623,29 @@ export default function Venda() {
           </button>
         </div>
       </div>
+
+      <AuthModal
+        open={Boolean(acaoAutenticacao)}
+        {...ACOES_STATUS[acaoAutenticacao]}
+        vendedores={vendedores}
+        vendedorInicial={vendedorLogadoId}
+        onConfirmar={handleConfirmarAutenticacao}
+        onClose={() => setAcaoAutenticacao(null)}
+        erro={erroAutenticacao}
+        carregando={autenticando}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 12px', fontSize: 13, margin: '10px 0 16px' }}>
+          <span style={{ color: 'var(--text-faint)' }}>Total</span>
+          <b className="mono">{formatadorMoeda.format(totalAPagarCaixa)}</b>
+          <span style={{ color: 'var(--text-faint)' }}>Condição</span>
+          <b>{rotuloCondicao(condicaoVenda)}</b>
+          <span style={{ color: 'var(--text-faint)' }}>Itens</span>
+          <b>{totalItensCarrinho}</b>
+        </div>
+        {acaoAutenticacao === 'CANCELADA' && (
+          <p>Os IMEIs/seriais desta venda voltam ao estoque.</p>
+        )}
+      </AuthModal>
     </div>
   );
 }
