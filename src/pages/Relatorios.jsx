@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { 
   FileSpreadsheet, 
   ArrowRight, 
@@ -13,6 +13,9 @@ import {
   Trash2
 } from 'lucide-react';
 import { PDVS, VENDEDORES } from '../data/demoData';
+import { listarFiliais } from '../services/vendasApi';
+import { loginDoToken } from '../services/api';
+import * as documental from '../services/documentalApi';
 
 function baixarExcelCSV(cabecalhos, linhas, nomeArquivo) {
   const delimitador = ';';
@@ -69,129 +72,128 @@ const ITENS_MENU_RELATORIOS = [
   }
 ];
 
-// Lojas principais que operam vendas
-const LOJAS_PRINCIPAIS_VENDA = [
-  { id: 'pdv-1', codigo: '0142', nome: 'GO - LUZIANIA SHOPPING CORUMBA', uf: 'GO', cancelada: false },
-  { id: 'pdv-2', codigo: '0143', nome: 'GO - ANAPOLIS CENTRO', uf: 'GO', cancelada: false },
-  { id: 'pdv-3', codigo: '0144', nome: 'DF - PLANALTINA LOJA 01', uf: 'DF', cancelada: false },
-  { id: 'pdv-4', codigo: '0145', nome: 'DF - SANTA MARIA SHOPPING', uf: 'DF', cancelada: false },
-  { id: 'pdv-5', codigo: '0146', nome: 'CE - FORTALEZA DOM LUÍS', uf: 'CE', cancelada: false },
-  { id: 'pdv-6', codigo: '0147', nome: 'CE - BENFICA SHOPPING', uf: 'CE', cancelada: false },
-  { id: 'pdv-7', codigo: '0148', nome: 'CE - CAUCAIA (CANCELADA)', uf: 'CE', cancelada: true },
-  { id: 'pdv-8', codigo: '0149', nome: 'GO - CALDAS NOVAS', uf: 'GO', cancelada: false }
-];
-
-const LISTA_TIPOS_PLANO = ['Controle', 'Pós', 'Pré'];
-
 const LISTA_SERVICOS_FILTRO = [
   'Alta', 'Migração', 'Reativação',
   'Seguro', 'SVA', 'Troca de Aparelho',
-  'Troca de número', 'Troca de Plano', 'Troca de Simcard',
-  'Troca de titularidade'
+  'Troca de Aparelho Smartphone Pós', 'Troca de número', 'Troca de Plano',
+  'Troca de Simcard', 'Troca de titularidade', 'Vinculado a Linha Contratada (Serviço)'
 ];
+const LISTA_TIPOS_PLANO = documental.TIPOS_PLANO.map((t) => t.valor);
 
-// Base com dados reais para o ficheiro exportado em Excel
-const REGISTROS_BASE_DOCUMENTAL = [
-  {
-    id: '000482',
-    data: '02/09/2026 14:15',
-    lojaId: 'pdv-1',
-    lojaNome: 'GO - LUZIANIA SHOPPING CORUMBA',
-    cliente: 'MARIANA RIBEIRO ALVES',
-    cpf: '042.891.231-55',
-    linha: '(61) 99437-3977',
-    servico: 'Alta',
-    tipoPlano: 'Controle',
-    plano: 'Vivo Controle 30GB',
-    protocolo: '472092420',
-    vendedor: 'CARLOS EDUARDO',
-    statusBko: 'Procedente',
-    valorTotal: 74.90
-  },
-  {
-    id: '000481',
-    data: '01/09/2026 11:30',
-    lojaId: 'pdv-2',
-    lojaNome: 'GO - ANAPOLIS CENTRO',
-    cliente: 'FERNANDO DIAS DA SILVA',
-    cpf: '321.654.987-10',
-    linha: '(61) 98112-4455',
-    servico: 'Migração',
-    tipoPlano: 'Pós',
-    plano: 'Vivo Família 120GB',
-    protocolo: '583920194',
-    vendedor: 'JULIANA MENDES',
-    statusBko: 'Em avaliacao pelo BKO',
-    valorTotal: 180.00
-  },
-  {
-    id: '000480',
-    data: '01/09/2026 09:20',
-    lojaId: 'pdv-3',
-    lojaNome: 'DF - PLANALTINA LOJA 01',
-    cliente: 'PATRÍCIA ROCHA FREITAS',
-    cpf: '789.123.456-00',
-    linha: '(61) 98765-1122',
-    servico: 'Troca de Simcard',
-    tipoPlano: 'Controle',
-    plano: 'Vivo Controle 20GB',
-    protocolo: '610293847',
-    vendedor: 'VILTON JODEVON',
-    statusBko: 'Improcedente',
-    valorTotal: 59.90
-  },
-  {
-    id: '000478',
-    data: '31/08/2026 16:40',
-    lojaId: 'pdv-5',
-    lojaNome: 'CE - FORTALEZA DOM LUÍS',
-    cliente: 'LUCAS GONÇALVES MARTINS',
-    cpf: '654.987.321-44',
-    linha: '(85) 99222-3344',
-    servico: 'Reativação',
-    tipoPlano: 'Pré',
-    plano: 'Vivo Pré Turbo',
-    protocolo: '719283719',
-    vendedor: 'JULIANA MENDES',
-    statusBko: 'Nao avaliado',
-    valorTotal: 0.00
+/** Data local em yyyy-MM-dd (toISOString usaria UTC e trocaria o dia à noite). */
+const dataISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const inicioDoMes = () => { const d = new Date(); d.setDate(1); return dataISO(d); };
+const hoje = () => dataISO(new Date());
+
+/** UF da filial pelo prefixo do nome ("CE - FTZ CENTRO" -> "CE"). */
+const ufDaFilial = (nome) => /^([A-Z]{2})\s*-/.exec(String(nome || '').trim())?.[1] || '';
+
+/** Padrão de filtros do usuário: fica no navegador, por login. O período não é salvo (volta para o mês atual). */
+const chavePadrao = () => `syscor_relatorio_documental_${loginDoToken() || 'anonimo'}`;
+function lerPadrao() {
+  try {
+    return JSON.parse(localStorage.getItem(chavePadrao()) || 'null');
+  } catch {
+    return null;
   }
-];
+}
+function gravarPadrao(padrao) {
+  try {
+    localStorage.setItem(chavePadrao(), JSON.stringify(padrao));
+    return true;
+  } catch {
+    return false;
+  }
+}
+function apagarPadrao() {
+  try {
+    localStorage.removeItem(chavePadrao());
+  } catch {
+    // storage indisponível: nada a apagar
+  }
+}
 
 /* ==========================================================================
-   TELA DE EXTRAÇÃO PARA EXCEL DA GESTÃO DOCUMENTAL
+   TELA DE EXTRAÇÃO PARA EXCEL DA GESTÃO DOCUMENTAL (dados da API)
    ========================================================================== */
 function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
-  const [filtroUf, setFiltroUf] = useState('');
-  const [lojasSelecionadas, setLojasSelecionadas] = useState([]);
+  const padrao = useMemo(lerPadrao, []);
 
-  // Período
-  const [dataInicio, setDataInicio] = useState('2026-09-01');
-  const [dataFim, setDataFim] = useState('2026-09-02');
+  const [filiais, setFiliais] = useState([]);
+  const [erroFiliais, setErroFiliais] = useState('');
+  const [filtroUf, setFiltroUf] = useState(padrao?.filtroUf || '');
+  const [lojasSelecionadas, setLojasSelecionadas] = useState(padrao?.lojasSelecionadas || []);
+  const [dataInicio, setDataInicio] = useState(inicioDoMes);
+  const [dataFim, setDataFim] = useState(hoje);
+  const [statusBko, setStatusBko] = useState(padrao?.statusBko || '');
+  const [planosSelecionados, setPlanosSelecionados] = useState(padrao?.planosSelecionados || [...LISTA_TIPOS_PLANO]);
+  const [servicosSelecionados, setServicosSelecionados] = useState(padrao?.servicosSelecionados || [...LISTA_SERVICOS_FILTRO]);
 
-  // Status BKO
-  const [statusBko, setStatusBko] = useState('Todos');
-
-  // Planos e Serviços
-  const [planosSelecionados, setPlanosSelecionados] = useState([...LISTA_TIPOS_PLANO]);
-  const [servicosSelecionados, setServicosSelecionados] = useState([...LISTA_SERVICOS_FILTRO]);
-
+  const [quantidade, setQuantidade] = useState(null);
+  const [contando, setContando] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState('');
+  const [mensagemErro, setMensagemErro] = useState('');
 
-  // Lojas filtradas por UF
-  const lojasExibidas = useMemo(() => {
-    if (!filtroUf) return LOJAS_PRINCIPAIS_VENDA;
-    return LOJAS_PRINCIPAIS_VENDA.filter(l => l.uf === filtroUf);
-  }, [filtroUf]);
+  useEffect(() => {
+    listarFiliais({ incluirInativas: true })
+      .then(setFiliais)
+      .catch((e) => setErroFiliais(e.mensagem || 'Não foi possível carregar as filiais.'));
+  }, []);
+
+  const ufs = useMemo(() => [...new Set(filiais.map((f) => ufDaFilial(f.nome)).filter(Boolean))].sort(), [filiais]);
+  const lojasExibidas = useMemo(
+    () => (filtroUf ? filiais.filter((f) => ufDaFilial(f.nome) === filtroUf) : filiais),
+    [filiais, filtroUf]
+  );
+
+  /** Filtros para a API. Nenhuma filial marcada = todas (as da UF, se houver UF); "Selecionar todos" = sem filtro. */
+  const filtros = useMemo(() => {
+    const filialIds = lojasSelecionadas.length
+      ? lojasSelecionadas
+      : (filtroUf ? lojasExibidas.map((f) => f.id) : []);
+    return {
+      dataInicio,
+      dataFim,
+      filialIds,
+      statusBko,
+      tiposPlano: planosSelecionados.length === LISTA_TIPOS_PLANO.length ? [] : planosSelecionados,
+      servicos: servicosSelecionados.length === LISTA_SERVICOS_FILTRO.length ? [] : servicosSelecionados,
+    };
+  }, [dataInicio, dataFim, lojasSelecionadas, filtroUf, lojasExibidas, statusBko, planosSelecionados, servicosSelecionados]);
+
+  const semPlanoOuServico = planosSelecionados.length === 0 || servicosSelecionados.length === 0;
+  const periodoIncompleto = !dataInicio || !dataFim;
+
+  // Quantidade de vendas antes de exportar (busca com size=1, lê o total)
+  useEffect(() => {
+    setMensagemErro('');
+    if (periodoIncompleto || semPlanoOuServico) {
+      setQuantidade(null);
+      return undefined;
+    }
+    let cancelado = false;
+    setContando(true);
+    const t = setTimeout(() => {
+      documental.contar(filtros)
+        .then((n) => { if (!cancelado) setQuantidade(n); })
+        .catch((e) => { if (!cancelado) { setQuantidade(null); setMensagemErro(e.mensagem || 'Falha ao contar as vendas.'); } })
+        .finally(() => { if (!cancelado) setContando(false); });
+    }, 400);
+    return () => { cancelado = true; clearTimeout(t); };
+  }, [filtros, periodoIncompleto, semPlanoOuServico]);
+
+  const avisar = (texto) => {
+    setMensagemSucesso(texto);
+    setTimeout(() => setMensagemSucesso(''), 3500);
+  };
 
   const handleToggleTodasLojas = (e) => {
-    setLojasSelecionadas(e.target.checked ? lojasExibidas.map(l => l.id) : []);
+    setLojasSelecionadas(e.target.checked ? lojasExibidas.map((l) => l.id) : []);
   };
 
   const handleToggleLoja = (id) => {
-    setLojasSelecionadas(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
+    setLojasSelecionadas((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
 
   const handleToggleTodosPlanos = (e) => {
@@ -199,9 +201,7 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
   };
 
   const handleTogglePlano = (plano) => {
-    setPlanosSelecionados(prev => 
-      prev.includes(plano) ? prev.filter(p => p !== plano) : [...prev, plano]
-    );
+    setPlanosSelecionados((prev) => (prev.includes(plano) ? prev.filter((p) => p !== plano) : [...prev, plano]));
   };
 
   const handleToggleTodosServicos = (e) => {
@@ -209,77 +209,70 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
   };
 
   const handleToggleServico = (servico) => {
-    setServicosSelecionados(prev => 
-      prev.includes(servico) ? prev.filter(s => s !== servico) : [...prev, servico]
-    );
+    setServicosSelecionados((prev) => (prev.includes(servico) ? prev.filter((s) => s !== servico) : [...prev, servico]));
   };
 
   const redefinirFiltros = () => {
     setFiltroUf('');
     setLojasSelecionadas([]);
-    setDataInicio('2026-09-01');
-    setDataFim('2026-09-02');
-    setStatusBko('Todos');
+    setDataInicio(inicioDoMes());
+    setDataFim(hoje());
+    setStatusBko('');
     setPlanosSelecionados([...LISTA_TIPOS_PLANO]);
     setServicosSelecionados([...LISTA_SERVICOS_FILTRO]);
-    setMensagemSucesso('Filtros redefinidos com sucesso.');
-    setTimeout(() => setMensagemSucesso(''), 3000);
   };
 
-  const handleExportarExcel = () => {
-    const dadosParaExportar = REGISTROS_BASE_DOCUMENTAL.filter((v) => {
-      if (lojasSelecionadas.length > 0 && !lojasSelecionadas.includes(v.lojaId)) {
-        return false;
-      }
-      if (statusBko !== 'Todos' && v.statusBko !== statusBko) {
-        return false;
-      }
-      if (planosSelecionados.length > 0 && !planosSelecionados.includes(v.tipoPlano)) {
-        return false;
-      }
-      if (servicosSelecionados.length > 0 && !servicosSelecionados.includes(v.servico)) {
-        return false;
-      }
-      return true;
-    });
+  const handleSalvarPadrao = () => {
+    const ok = gravarPadrao({ filtroUf, lojasSelecionadas, statusBko, planosSelecionados, servicosSelecionados });
+    if (ok) avisar('Filtros salvos como seu padrão. Eles voltam quando você abrir esta tela.');
+    else setMensagemErro('O navegador não deixou salvar os filtros (armazenamento indisponível).');
+  };
 
-    const cabecalhos = [
-      'Data/Hora',
-      'Nº Venda',
-      'Filial / Loja',
-      'Cliente',
-      'CPF',
-      'Linha',
-      'Serviço',
-      'Tipo de Plano',
-      'Plano Contratado',
-      'Protocolo GED',
-      'Vendedor',
-      'Status BKO',
-      'Valor Total (R$)'
-    ];
+  const handleApagarPadrao = () => {
+    apagarPadrao();
+    redefinirFiltros();
+    avisar('Padrão apagado e filtros redefinidos.');
+  };
 
-    const baseFinal = dadosParaExportar.length > 0 ? dadosParaExportar : REGISTROS_BASE_DOCUMENTAL;
+  const handleExportarExcel = async () => {
+    setMensagemErro('');
+    if (periodoIncompleto) {
+      setMensagemErro('Informe o período da venda.');
+      return;
+    }
+    if (semPlanoOuServico) {
+      setMensagemErro('Marque ao menos um tipo de plano e um serviço.');
+      return;
+    }
+    setExportando(true);
+    try {
+      const total = await documental.contar(filtros);
+      setQuantidade(total);
+      if (total === 0) {
+        setMensagemErro('Nenhuma venda encontrada para esses filtros');
+        return;
+      }
+      await documental.exportar(filtros);
+      avisar(`Relatório exportado com ${total} venda(s).`);
+    } catch (e) {
+      setMensagemErro(e.mensagem || e.message || 'Falha ao exportar o relatório.');
+    } finally {
+      setExportando(false);
+    }
+  };
 
-    const linhas = baseFinal.map((v) => [
-      v.data,
-      v.id,
-      v.lojaNome,
-      v.cliente,
-      v.cpf,
-      v.linha,
-      v.servico,
-      v.tipoPlano,
-      v.plano,
-      v.protocolo,
-      v.vendedor,
-      v.statusBko,
-      v.valorTotal.toFixed(2).replace('.', ',')
-    ]);
-
-    baixarExcelCSV(cabecalhos, linhas, `Relatorio_Gestao_Documental_${dataInicio}_a_${dataFim}`);
-    setMensagemSucesso('Ficheiro Excel exportado com sucesso!');
-    setTimeout(() => setMensagemSucesso(''), 3500);
+  const campoData = {
+    maxWidth: 160,
+    minHeight: 38,
+    height: 'auto',
+    padding: '7px 10px',
+    fontSize: 13,
+    lineHeight: 1.4,
+    background: 'var(--panel-2)',
+    color: 'var(--text)',
+    border: '1px solid var(--line)',
+    borderRadius: 6,
+    boxSizing: 'border-box'
   };
 
   return (
@@ -292,27 +285,20 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
           </h1>
         </div>
 
-        <button
-          type="button"
-          className="btn sm ghost"
-          onClick={onVoltar}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-        >
+        <button type="button" className="btn sm ghost" onClick={onVoltar} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <ArrowLeft size={14} /> Voltar à Seleção
         </button>
       </div>
 
       {mensagemSucesso && (
-        <div style={{
-          background: 'var(--good-soft)',
-          color: 'var(--good)',
-          border: '1px solid var(--good)',
-          padding: '10px 16px',
-          borderRadius: 8,
-          fontSize: 13,
-          fontWeight: 600
-        }}>
+        <div role="status" style={{ background: 'var(--good-soft)', color: 'var(--good)', border: '1px solid var(--good)', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
           ✓ {mensagemSucesso}
+        </div>
+      )}
+
+      {(mensagemErro || erroFiliais) && (
+        <div role="alert" style={{ background: 'rgba(239, 68, 68, 0.12)', color: 'var(--bad, #ef4444)', border: '1px solid var(--bad, #ef4444)', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+          {mensagemErro || erroFiliais}
         </div>
       )}
 
@@ -332,38 +318,20 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             <select
               value={filtroUf}
-              onChange={(e) => setFiltroUf(e.target.value)}
-              style={{
-                width: 90,
-                minHeight: 34,
-                height: 'auto',
-                fontSize: 12.5,
-                background: 'var(--panel-2)',
-                color: 'var(--text)',
-                border: '1px solid var(--line)',
-                borderRadius: 6,
-                padding: '4px 8px'
-              }}
+              onChange={(e) => { setFiltroUf(e.target.value); setLojasSelecionadas([]); }}
+              style={{ width: 90, minHeight: 34, height: 'auto', fontSize: 12.5, background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 8px' }}
             >
               <option value="">UF</option>
-              <option value="GO">GO</option>
-              <option value="DF">DF</option>
-              <option value="CE">CE</option>
+              {ufs.map((uf) => (
+                <option key={uf} value={uf}>{uf}</option>
+              ))}
             </select>
 
             <button
               type="button"
               className="btn sm"
               onClick={redefinirFiltros}
-              style={{
-                background: '#475569',
-                borderColor: '#475569',
-                color: '#fff',
-                fontSize: 11.5,
-                minHeight: 34,
-                height: 'auto',
-                padding: '6px 12px'
-              }}
+              style={{ background: '#475569', borderColor: '#475569', color: '#fff', fontSize: 11.5, minHeight: 34, height: 'auto', padding: '6px 12px' }}
             >
               Redefinir filtros
             </button>
@@ -378,34 +346,22 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
             <span>Selecionar todos</span>
           </label>
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '8px 14px'
-          }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px 14px' }}>
             {lojasExibidas.map((loja) => (
               <label
                 key={loja.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  color: loja.cancelada ? 'var(--bad, #f43f5e)' : 'var(--text)'
-                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer', color: loja.ativo ? 'var(--text)' : 'var(--bad, #f43f5e)' }}
               >
-                <input
-                  type="checkbox"
-                  checked={lojasSelecionadas.includes(loja.id)}
-                  onChange={() => handleToggleLoja(loja.id)}
-                />
+                <input type="checkbox" checked={lojasSelecionadas.includes(loja.id)} onChange={() => handleToggleLoja(loja.id)} />
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {loja.nome}
+                  {loja.nome}{loja.ativo ? '' : ' (INATIVA)'}
                 </span>
               </label>
             ))}
           </div>
+          <small style={{ color: 'var(--text-faint)', display: 'block', marginTop: 8 }}>
+            Sem filial marcada, entram todas{filtroUf ? ` as filiais de ${filtroUf}` : ''}.
+          </small>
         </div>
 
         <hr style={{ borderColor: 'var(--line-soft)', margin: '18px 0' }} />
@@ -417,44 +373,11 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
               Período da Venda:
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="date"
-                value={dataInicio}
-                onChange={(e) => setDataInicio(e.target.value)}
-                style={{
-                  maxWidth: 160,
-                  minHeight: 38,
-                  height: 'auto',
-                  padding: '7px 10px',
-                  fontSize: 13,
-                  lineHeight: 1.4,
-                  background: 'var(--panel-2)',
-                  color: 'var(--text)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 6,
-                  boxSizing: 'border-box'
-                }}
-              />
+              <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} style={campoData} />
               <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>Até</span>
-              <input
-                type="date"
-                value={dataFim}
-                onChange={(e) => setDataFim(e.target.value)}
-                style={{
-                  maxWidth: 160,
-                  minHeight: 38,
-                  height: 'auto',
-                  padding: '7px 10px',
-                  fontSize: 13,
-                  lineHeight: 1.4,
-                  background: 'var(--panel-2)',
-                  color: 'var(--text)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 6,
-                  boxSizing: 'border-box'
-                }}
-              />
+              <input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} style={campoData} />
             </div>
+            <small style={{ color: 'var(--text-faint)', display: 'block', marginTop: 4 }}>Até 93 dias por exportação.</small>
           </div>
 
           <div className="field" style={{ margin: 0 }}>
@@ -464,28 +387,12 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
             <select
               value={statusBko}
               onChange={(e) => setStatusBko(e.target.value)}
-              style={{
-                width: '100%',
-                maxWidth: 280,
-                minHeight: 38,
-                height: 'auto',
-                padding: '7px 12px',
-                fontSize: 13,
-                lineHeight: 1.4,
-                background: 'var(--panel-2)',
-                color: 'var(--text)',
-                border: '1px solid var(--line)',
-                borderRadius: 6,
-                outline: 'none',
-                boxSizing: 'border-box',
-                cursor: 'pointer'
-              }}
+              style={{ width: '100%', maxWidth: 280, minHeight: 38, height: 'auto', padding: '7px 12px', fontSize: 13, lineHeight: 1.4, background: 'var(--panel-2)', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: 6, outline: 'none', boxSizing: 'border-box', cursor: 'pointer' }}
             >
-              <option value="Todos">Todos</option>
-              <option value="Improcedente">Improcedente</option>
-              <option value="Procedente">Procedente</option>
-              <option value="Nao avaliado">Não avaliado</option>
-              <option value="Em avaliacao pelo BKO">Em avaliação pelo BKO</option>
+              <option value="">Todos</option>
+              {documental.STATUS_BKO.map((s) => (
+                <option key={s.valor} value={s.valor}>{s.rotulo}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -499,23 +406,15 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
           </label>
 
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={planosSelecionados.length === LISTA_TIPOS_PLANO.length}
-              onChange={handleToggleTodosPlanos}
-            />
+            <input type="checkbox" checked={planosSelecionados.length === LISTA_TIPOS_PLANO.length} onChange={handleToggleTodosPlanos} />
             <span>Selecionar todos</span>
           </label>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px 14px' }}>
-            {LISTA_TIPOS_PLANO.map((plano) => (
-              <label key={plano} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={planosSelecionados.includes(plano)}
-                  onChange={() => handleTogglePlano(plano)}
-                />
-                <span>{plano}</span>
+            {documental.TIPOS_PLANO.map((plano) => (
+              <label key={plano.valor} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
+                <input type="checkbox" checked={planosSelecionados.includes(plano.valor)} onChange={() => handleTogglePlano(plano.valor)} />
+                <span>{plano.rotulo}</span>
               </label>
             ))}
           </div>
@@ -530,22 +429,14 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
           </label>
 
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer', marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={servicosSelecionados.length === LISTA_SERVICOS_FILTRO.length}
-              onChange={handleToggleTodosServicos}
-            />
+            <input type="checkbox" checked={servicosSelecionados.length === LISTA_SERVICOS_FILTRO.length} onChange={handleToggleTodosServicos} />
             <span>Selecionar todos</span>
           </label>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px 14px' }}>
             {LISTA_SERVICOS_FILTRO.map((serv) => (
               <label key={serv} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={servicosSelecionados.includes(serv)}
-                  onChange={() => handleToggleServico(serv)}
-                />
+                <input type="checkbox" checked={servicosSelecionados.includes(serv)} onChange={() => handleToggleServico(serv)} />
                 <span>{serv}</span>
               </label>
             ))}
@@ -554,58 +445,26 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
       </div>
 
       {/* BARRA FLUTUANTE DE AÇÕES */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'flex-end',
-        alignItems: 'center',
-        gap: 12,
-        padding: '12px 20px',
-        background: 'rgba(28, 23, 48, 0.95)',
-        border: '1px solid var(--line)',
-        borderRadius: 8,
-        position: 'sticky',
-        bottom: 16,
-        zIndex: 50
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, padding: '12px 20px', background: 'rgba(28, 23, 48, 0.95)', border: '1px solid var(--line)', borderRadius: 8, position: 'sticky', bottom: 16, zIndex: 50 }}>
+        <span role="status" style={{ marginRight: 'auto', fontSize: 13, color: 'var(--text-dim, #cbd5e1)' }}>
+          {periodoIncompleto ? 'Informe o período.'
+            : semPlanoOuServico ? 'Marque ao menos um tipo de plano e um serviço.'
+              : contando ? 'Contando vendas...'
+                : quantidade === null ? '' : `${quantidade} venda(s) encontrada(s)`}
+        </span>
+
         <button
           type="button"
-          onClick={redefinirFiltros}
-          style={{
-            background: '#b91c1c',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            padding: '8px 18px',
-            fontSize: 13,
-            fontWeight: 700,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            cursor: 'pointer'
-          }}
+          onClick={handleApagarPadrao}
+          style={{ background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
         >
           Apagar <Trash2 size={14} />
         </button>
 
         <button
           type="button"
-          onClick={() => {
-            setMensagemSucesso('Filtros e parâmetros salvos com sucesso.');
-            setTimeout(() => setMensagemSucesso(''), 3000);
-          }}
-          style={{
-            background: '#65a30d',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            padding: '8px 22px',
-            fontSize: 13,
-            fontWeight: 700,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            cursor: 'pointer'
-          }}
+          onClick={handleSalvarPadrao}
+          style={{ background: '#65a30d', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 22px', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
         >
           Salvar <Check size={16} strokeWidth={3} />
         </button>
@@ -613,24 +472,12 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
         <button
           type="button"
           onClick={handleExportarExcel}
-          style={{
-            background: '#9333ea',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 6,
-            padding: '8px 20px',
-            fontSize: 13,
-            fontWeight: 700,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            cursor: 'pointer'
-          }}
+          disabled={exportando}
+          style={{ background: '#9333ea', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 20px', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 8, cursor: exportando ? 'not-allowed' : 'pointer' }}
         >
-          Exportar <FileSpreadsheet size={15} />
+          {exportando ? 'Exportando...' : 'Exportar'} <FileSpreadsheet size={15} />
         </button>
       </div>
-
     </div>
   );
 }
@@ -686,6 +533,10 @@ function TelaExtracaoGenerica({ tipo, onVoltar, vendas }) {
         </button>
       </div>
 
+      <div role="note" style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warn, #f59e0b)', border: '1px solid var(--warn, #f59e0b)', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+        Dados de demonstração: esta extração ainda lê as vendas guardadas no navegador, e não as do sistema.
+      </div>
+
       <div className="panel" style={{ padding: 24, background: 'var(--panel)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
           <div className="field" style={{ margin: 0 }}>
@@ -714,7 +565,7 @@ function TelaExtracaoGenerica({ tipo, onVoltar, vendas }) {
               style={{ minHeight: 38, height: 'auto' }}
             >
               <option value="TODOS">Todas as Lojas</option>
-              {LOJAS_PRINCIPAIS_VENDA.map(p => (
+              {(PDVS || []).map(p => (
                 <option key={p.id} value={p.id}>{p.nome}</option>
               ))}
             </select>
