@@ -461,7 +461,6 @@ export default function Venda() {
     numeroLinha: '',
     sistemaOrigem: '',
     vencimentoFatura: '',
-    valorMensalidade: '',
     simcard3g: '',
     simcard4g: '',
     clientePossuiSimcard: false,
@@ -756,7 +755,7 @@ export default function Venda() {
 
   const formServicoVazio = () => ({
     servico: '', ddd: '', tipoPlano: '', planoAntigo: '', planoNovo: '', numeroLinha: '', sistemaOrigem: '',
-    vencimentoFatura: '', valorMensalidade: '', simcard3g: '', simcard4g: '', clientePossuiSimcard: false,
+    vencimentoFatura: '', simcard3g: '', simcard4g: '', clientePossuiSimcard: false,
     simcardDoado: false, descontoChip: '', cobrarChip: false, serialConfirmado: false
   });
 
@@ -792,13 +791,11 @@ export default function Venda() {
         produtoId: null,
         descricaoProduto: descricaoCompleta,
         quantidade: 1,
-        valorUnitario: 0,                       // plano é cobrado na fatura da operadora
         tipoServico: servicoForm.servico,
         ddd: servicoForm.ddd || null,
         numeroAcesso: servicoForm.numeroLinha,
         planoAntigo: planoParaVenda(servicoForm.planoAntigo),
         plano: planoParaVenda(servicoForm.planoNovo),
-        valorAdicional: num(String(servicoForm.valorMensalidade).replace(/\./g, '').replace(',', '.')),   // mensalidade informada na fatura
         vencimentoFatura: servicoForm.vencimentoFatura || null,
         sistemaOrigem: servicoForm.sistemaOrigem || null,
         simcard3g: servicoForm.simcard3g || null,
@@ -1860,15 +1857,8 @@ export default function Venda() {
                     />
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Mensalidade na fatura (R$):</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0,00"
-                        value={servicoForm.valorMensalidade}
-                        onChange={(e) => setServicoForm((prev) => ({ ...prev, valorMensalidade: e.target.value }))}
-                        style={{ ...inputStyleGlobal, width: 110, textAlign: 'right' }}
-                      />
+                      <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Valor do serviço:</span>
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{formatadorMoeda.format(0)}</span>
                     </div>
                   </div>
                 </div>
@@ -2072,9 +2062,14 @@ export default function Venda() {
                             )}
                           </td>
                           <td style={{ padding: '12px 16px', textAlign: 'right' }} className="mono">
-                            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
-                              {formatadorMoeda.format(item.mensalidadeFatura)}/mês
-                            </span>
+                            {/* Sem campo no formulário: só vendas antigas trazem mensalidade */}
+                            {item.mensalidadeFatura > 0 ? (
+                              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                                {formatadorMoeda.format(item.mensalidadeFatura)}/mês
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-faint)' }}>—</span>
+                            )}
                           </td>
                           <td style={{ textAlign: 'center', padding: '12px 8px' }}>
                             <button
