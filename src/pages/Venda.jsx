@@ -400,6 +400,15 @@ export default function Venda() {
   const [status, setStatus] = useState('ABERTA');
   const [carregando, setCarregando] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState('');
+  const timerSucessoRef = useRef(null);
+  useEffect(() => () => clearTimeout(timerSucessoRef.current), []);
+
+  /** Cancela o timer da mensagem anterior, que apagaria esta antes da hora. */
+  const mostrarSucesso = (mensagem, duracaoMs = 5000) => {
+    clearTimeout(timerSucessoRef.current);
+    setMensagemSucesso(mensagem);
+    timerSucessoRef.current = setTimeout(() => setMensagemSucesso(''), duracaoMs);
+  };
 
   // Identificação
   const [pdvId, setPdvId] = useState('');
@@ -753,8 +762,7 @@ export default function Venda() {
     if (!item) return;
     const extra = [item.tabelaAplicada && api.rotuloTabela(item.tabelaAplicada), item.grupoPlano && api.rotuloGrupo(item.grupoPlano)]
       .filter(Boolean).join(' · ');
-    setMensagemSucesso(`${rotulo} adicionado: ${api.formatarMoeda(item.valorUnitario)}${extra ? ` (${extra})` : ''}.`);
-    setTimeout(() => setMensagemSucesso(''), 5000);
+    mostrarSucesso(`${rotulo} adicionado: ${api.formatarMoeda(item.valorUnitario)}${extra ? ` (${extra})` : ''}.`);
   };
 
   const formServicoVazio = () => ({
@@ -812,8 +820,7 @@ export default function Venda() {
         serialConfirmado: !!servicoForm.serialConfirmado
       });
       if (gravado?.valorChip != null) {
-        setMensagemSucesso(`Serviço adicionado. Chip: ${api.formatarMoeda(gravado.valorChip)}.`);
-        setTimeout(() => setMensagemSucesso(''), 5000);
+        mostrarSucesso(`Serviço adicionado. Chip: ${api.formatarMoeda(gravado.valorChip)}.`);
       }
       setServicoForm(formServicoVazio());
     });
@@ -1029,8 +1036,7 @@ export default function Venda() {
     const numero = String(v.numeroVenda).padStart(6, '0');
     setAcaoAutenticacao(null);
     resetarTela();
-    setMensagemSucesso(`Venda #${numero} finalizada por ${v.finalizadoPorNome || v.vendedorNome} e enviada para aprovação.`);
-    setTimeout(() => setMensagemSucesso(''), 6000);
+    mostrarSucesso(`Venda #${numero} finalizada por ${v.finalizadoPorNome || v.vendedorNome} e enviada para aprovação.`, 6000);
   };
 
   const abrirAutenticacao = (acao) => {
@@ -1049,8 +1055,7 @@ export default function Venda() {
     setAcaoAutenticacao(null);
     if (novoStatus === 'CANCELADA') resetarTela();
     else aplicarVenda(v);
-    setMensagemSucesso(`Venda #${numero}: status alterado para ${v.status}.`);
-    setTimeout(() => setMensagemSucesso(''), 5000);
+    mostrarSucesso(`Venda #${numero}: status alterado para ${v.status}.`);
   };
 
   /** 401 e falhas inesperadas ficam no modal, que continua aberto; 422 é regra da venda e volta para a tela. */
