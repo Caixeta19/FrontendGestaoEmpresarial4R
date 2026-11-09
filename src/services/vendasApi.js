@@ -85,7 +85,9 @@ export const login = (email, senha) => request('/auth/login', { method: 'POST', 
 export const alterarSenha = (senhaAtual, novaSenha) =>
   request('/auth/alterar-senha', { method: 'POST', body: { senhaAtual, novaSenha } });
 
-export const listarFiliais = () => request('/filiais');
+/** Filiais ativas; { incluirInativas: true } traz também as inativas (relatórios). */
+export const listarFiliais = ({ incluirInativas = false } = {}) =>
+  request('/filiais', { params: incluirInativas ? { incluirInativas: true } : undefined });
 export const listarVendedores = () => request('/usuarios');
 
 export async function buscarClientes(busca) {
