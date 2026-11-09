@@ -10,6 +10,17 @@ const numeroOuNull = (v) => (v === null || v === undefined || v === '' || Number
 const moedaBR = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 export const formatarMoeda = (v) => moedaBR.format(Number(v) || 0);
 
+/**
+ * Valor digitado -> número. Aceita "1.199,50", "1199,50", "1199.50" e "1.199" (milhar). Inválido -> NaN.
+ */
+export const lerValorBR = (texto) => {
+  const t = String(texto ?? '').trim();
+  let normal = t;
+  if (t.includes(',')) normal = t.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) normal = t.replace(/\./g, '');
+  return /^-?\d*\.?\d+$/.test(normal) ? Number(normal) : NaN;
+};
+
 /** "2026-11-01" (LocalDate) -> "01/11/2026". Sem passar por Date para não deslocar o fuso. */
 export const formatarData = (iso) => {
   if (!iso) return '—';
@@ -52,9 +63,12 @@ export const FORMA_ENUM = {
   'Vivo Pay': 'VIVO_PAY',
   'Dinheiro': 'DINHEIRO',
   'Boleto Bancário / Convênio': 'BOLETO',
-  'Voucher': 'VOUCHER',
 };
-const FORMA_ROTULO = Object.fromEntries(Object.entries(FORMA_ENUM).map(([r, e]) => [e, r]));
+// VOUCHER não é mais forma de pagamento: o rótulo fica só para exibir vendas antigas
+const FORMA_ROTULO = {
+  ...Object.fromEntries(Object.entries(FORMA_ENUM).map(([r, e]) => [e, r])),
+  VOUCHER: 'Voucher',
+};
 
 // ---------------------------------------------------------------- condição de pagamento
 export const PARCELAS_FINANCIADAS = [13, 14, 15, 16, 17, 18, 19, 20, 21];
@@ -184,8 +198,12 @@ export const adicionarItem = (id, corpo) => request(`/vendas/${id}/itens`, { met
 export const removerItem = (id, itemId) => request(`/vendas/${id}/itens/${itemId}`, { method: 'DELETE' });
 export const adicionarPagamento = (id, corpo) => request(`/vendas/${id}/pagamentos`, { method: 'POST', body: corpo });
 export const removerPagamento = (id, pgId) => request(`/vendas/${id}/pagamentos/${pgId}`, { method: 'DELETE' });
-/** Liga/desliga a TABELA RENOVA nos aparelhos (exige voucher lançado). Devolve a venda reprecificada. */
-export const aplicarRenova = (id, ativo) => request(`/vendas/${id}/renova`, { method: 'PATCH', body: { ativo } });
+/**
+ * Liga o Renova com o número do voucher ou desliga (limpa o número). Devolve a venda reprecificada.
+ * 409 = número já usado em outra venda; 422 = sem número, sem aparelho elegível ou plano pré-pago.
+ */
+export const aplicarRenova = (id, ativo, codigoVoucher) =>
+  request(`/vendas/${id}/renova`, { method: 'PATCH', body: ativo ? { ativo, codigoVoucher } : { ativo: false } });
 /** Troca a condição e devolve a venda reprecificada. 422 traz pagamentosIncompativeis em ApiError.corpo. */
 export const alterarCondicao = (id, condicao) =>
   request(`/vendas/${id}/condicao-pagamento`, { method: 'PATCH', body: { condicao } });
@@ -273,6 +291,7 @@ export function vendaParaTela(v) {
     saldo: numeroOuNull(v.saldo),           // valorTotal − pagamentos (negativo = pagamentos acima do total)
     aviso: v.aviso || null,
     renova: Boolean(v.renova),
+    codigoVoucher: v.codigoVoucher || null, // null com o Renova desligado
     descontoFabricante: numeroOuNull(v.descontoFabricante),
     condicaoPagamento: v.condicaoPagamento || 'A_VISTA',
     parcelasCondicao: numeroOuNull(v.parcelasCondicao),

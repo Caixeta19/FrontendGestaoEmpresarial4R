@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Pencil, Plus, Trash2, CheckCircle, HelpCircle, X, Check } from 'lucide-react';
 import * as api from '../services/vendasApi';
+import { useToast } from '../components/ToastContext.jsx';
 
 const CATEGORIAS_ITENS = [
   { id: 'PRODUTO_VIVO', rotulo: 'Produto Vivo' },
@@ -12,17 +13,16 @@ const CATEGORIAS_ITENS = [
 ];
 
 // Formas que cada condição aceita. O crédito do parcelado é a linha FINANCIADO, criada pelo backend.
-const FORMAS_PIX = ['PIX', 'Vivo Pay', 'Voucher'];
+const FORMAS_PIX = ['PIX', 'Vivo Pay'];
 const FORMAS_A_VISTA = [
   'Cartão de Crédito',
   'Cartão de Débito',
   'Dinheiro',
   'PIX',
   'Vivo Pay',
-  'Boleto Bancário / Convênio',
-  'Voucher'
+  'Boleto Bancário / Convênio'
 ];
-const FORMAS_ENTRADA = ['Dinheiro', 'PIX', 'Vivo Pay', 'Cartão de Débito', 'Voucher'];
+const FORMAS_ENTRADA = ['Dinheiro', 'PIX', 'Vivo Pay', 'Cartão de Débito'];
 const formasDaCondicao = (condicao) => {
   if (condicao === 'PIX') return FORMAS_PIX;
   return api.ehParcelado(condicao) ? FORMAS_ENTRADA : FORMAS_A_VISTA;
@@ -278,10 +278,11 @@ function CartoesCondicao({ simulacao, condicao, parcelas, bloqueado, onEscolher,
 /** Resumo da aba Pagamento: só exibe o que o backend devolveu. */
 function ResumoPagamento({ pagto, total, pago, saldo, renova, descontoFabricante }) {
   const ajuste = pagto.ajusteCondicao || 0;
-  const linha = (rotulo, valor, destaque) => (
+  const saldoNegativo = (saldo || 0) < 0;
+  const linha = (rotulo, valor, destaque, corValor = 'var(--text)') => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: destaque ? 14.5 : 13 }}>
       <span style={{ color: destaque ? 'var(--text)' : 'var(--text-dim)', fontWeight: destaque ? 700 : 500 }}>{rotulo}</span>
-      <span className="mono" style={{ color: 'var(--text)', fontWeight: destaque ? 700 : 600 }}>{formatadorMoeda.format(valor || 0)}</span>
+      <span className="mono" style={{ color: corValor, fontWeight: destaque ? 700 : 600 }}>{formatadorMoeda.format(valor || 0)}</span>
     </div>
   );
   return (
@@ -292,7 +293,12 @@ function ResumoPagamento({ pagto, total, pago, saldo, renova, descontoFabricante
       {renova && linha('Desconto fabricante (Renova, informativo)', descontoFabricante)}
       {linha('Total', total, true)}
       {linha('Pago', pago)}
-      {linha('Saldo', saldo, true)}
+      {linha('Saldo', saldo, true, saldoNegativo ? 'var(--bad, #ef4444)' : 'var(--text)')}
+      {saldoNegativo && (
+        <div role="alert" style={{ fontSize: 13, fontWeight: 600, color: 'var(--bad, #ef4444)' }}>
+          Pagamentos acima do total em {formatadorMoeda.format(Math.abs(saldo))}: remova ou ajuste um pagamento.
+        </div>
+      )}
       {api.ehParcelado(pagto.condicaoPagamento) && (
         <div className="mono" style={{ textAlign: 'right', fontSize: 13, color: 'var(--text-dim)' }}>
           {pagto.parcelasCondicao} × {formatadorMoeda.format(pagto.valorParcela || 0)}
@@ -388,12 +394,16 @@ export default function Venda() {
   const [emailLogin, setEmailLogin] = useState('');
   const [senha, setSenha] = useState('');
 
+  const showToast = useToast();
+
   // Integração com a API
   const [vendaId, setVendaId] = useState(null);          // id da venda no backend (null = carrinho ainda não aberto)
   const [valorTotalVenda, setValorTotalVenda] = useState(null); // valorTotal devolvido pelo backend
   const [saldoVenda, setSaldoVenda] = useState(null);           // saldo devolvido pelo backend (pode ser negativo)
   const [avisoVenda, setAvisoVenda] = useState('');             // aviso do backend (ex.: pagamentos acima do total)
   const [renovaAtivo, setRenovaAtivo] = useState(false);
+  const [codigoVoucherVenda, setCodigoVoucherVenda] = useState(null); // número gravado na venda (backend)
+  const [numeroVoucher, setNumeroVoucher] = useState('');       // campo "Número do voucher"
   const [descontoFabricante, setDescontoFabricante] = useState(null);
   const [renovaBloqueio, setRenovaBloqueio] = useState('');     // mensagem do backend ao recusar o Renova
   const [pagtoVenda, setPagtoVenda] = useState(PAGTO_VENDA_VAZIO); // condição e valores devolvidos pelo backend
@@ -451,7 +461,6 @@ export default function Venda() {
     numeroLinha: '',
     sistemaOrigem: '',
     vencimentoFatura: '',
-    valorMensalidade: '',
     simcard3g: '',
     simcard4g: '',
     clientePossuiSimcard: false,
@@ -471,8 +480,7 @@ export default function Venda() {
   const [pgtoForm, setPgtoForm] = useState({
     forma: '',
     valor: '',
-    parcelas: '1x',
-    codigoVoucher: ''
+    parcelas: '1x'
   });
 
   // =========================================================================
@@ -495,10 +503,9 @@ export default function Venda() {
   // Saldo vindo do backend (valorTotal − pagamentos); sem venda aberta, nada a pagar
   const saldoBackend = saldoVenda ?? totalAPagarCaixa;
   const totalPagoAteAgora = totalAPagarCaixa - saldoBackend;
-  const saldoRestante = Math.max(0, saldoBackend);
 
-  // Renova: precisa de voucher lançado e de aparelho com preço por plano
-  const temVoucher = pagamentos.some((p) => p.formaEnum === 'VOUCHER');
+  // Renova: precisa do número do voucher e de aparelho com preço por plano
+  const temVoucher = Boolean(codigoVoucherVenda);
   const temAparelhoRenova = itensPorCategoria.PRODUTO_VIVO.some((i) => i.grupoPlano && i.grupoPlano !== 'SEM_PLANO');
   useEffect(() => { setRenovaBloqueio(''); }, [itensPorCategoria]);
 
@@ -528,17 +535,7 @@ export default function Venda() {
         if (atual) setSimulacaoErro(e.mensagem || 'Falha ao simular o pagamento.');
       });
     return () => { atual = false; };
-  }, [abaAtiva, vendaId, itensPorCategoria, pagamentos, renovaAtivo]);
-
-  useEffect(() => {
-    if (abaAtiva === 'PAGAMENTO') {
-      setPgtoForm((prev) => ({
-        ...prev,
-        // No parcelado o campo é a entrada, que é opcional: o saldo vai para o financiamento
-        valor: !vendaParcelada && saldoRestante > 0 ? saldoRestante.toFixed(2) : ''
-      }));
-    }
-  }, [abaAtiva, saldoRestante, vendaParcelada]);
+  }, [abaAtiva, vendaId, itensPorCategoria, pagamentos, renovaAtivo, codigoVoucherVenda]);
 
   // Trocou a condição: a forma escolhida pode não valer mais
   useEffect(() => {
@@ -654,6 +651,7 @@ export default function Venda() {
     setSaldoVenda(tela.saldo);
     setAvisoVenda(tela.aviso || '');
     setRenovaAtivo(tela.renova);
+    setCodigoVoucherVenda(tela.codigoVoucher);
     setDescontoFabricante(tela.descontoFabricante);
     setPagtoVenda({
       condicaoPagamento: tela.condicaoPagamento,
@@ -667,6 +665,7 @@ export default function Venda() {
 
   const carregarVendaExistente = (v) => {
     aplicarVenda(v);
+    setNumeroVoucher(v.codigoVoucher || '');
     setCliente({ id: v.clienteId, nome: v.clienteNome, doc: '—' });
     setBuscaCliente(v.clienteNome);
     setPdvId(String(v.filialId));
@@ -679,6 +678,8 @@ export default function Venda() {
     setSaldoVenda(null);
     setAvisoVenda('');
     setRenovaAtivo(false);
+    setCodigoVoucherVenda(null);
+    setNumeroVoucher('');
     setDescontoFabricante(null);
     setRenovaBloqueio('');
     setPagtoVenda(PAGTO_VENDA_VAZIO);
@@ -689,6 +690,7 @@ export default function Venda() {
     setCliente(null);
     setBuscaCliente('');
     setPagamentos([]);
+    setPgtoForm((prev) => ({ ...prev, valor: '' }));
     setItensPorCategoria({ PRODUTO_VIVO: [], SERVICO_VIVO: [], ACESSORIO: [], RECARGA: [] });
     setSenha('');
     setAbaAtiva('INICIO');
@@ -753,7 +755,7 @@ export default function Venda() {
 
   const formServicoVazio = () => ({
     servico: '', ddd: '', tipoPlano: '', planoAntigo: '', planoNovo: '', numeroLinha: '', sistemaOrigem: '',
-    vencimentoFatura: '', valorMensalidade: '', simcard3g: '', simcard4g: '', clientePossuiSimcard: false,
+    vencimentoFatura: '', simcard3g: '', simcard4g: '', clientePossuiSimcard: false,
     simcardDoado: false, descontoChip: '', cobrarChip: false, serialConfirmado: false
   });
 
@@ -789,13 +791,11 @@ export default function Venda() {
         produtoId: null,
         descricaoProduto: descricaoCompleta,
         quantidade: 1,
-        valorUnitario: 0,                       // plano é cobrado na fatura da operadora
         tipoServico: servicoForm.servico,
         ddd: servicoForm.ddd || null,
         numeroAcesso: servicoForm.numeroLinha,
         planoAntigo: planoParaVenda(servicoForm.planoAntigo),
         plano: planoParaVenda(servicoForm.planoNovo),
-        valorAdicional: num(String(servicoForm.valorMensalidade).replace(/\./g, '').replace(',', '.')),   // mensalidade informada na fatura
         vencimentoFatura: servicoForm.vencimentoFatura || null,
         sistemaOrigem: servicoForm.sistemaOrigem || null,
         simcard3g: servicoForm.simcard3g || null,
@@ -898,40 +898,43 @@ export default function Venda() {
 
   const handleAdicionarPagamento = (e) => {
     e.preventDefault();
-    const v = parseFloat(String(pgtoForm.valor).replace(',', '.'));
     if (!pgtoForm.forma) {
-      alert('Selecione a forma de pagamento.');
+      showToast('Selecione a forma de pagamento.', true);
+      return;
+    }
+    const v = Math.round(api.lerValorBR(pgtoForm.valor) * 100) / 100;
+    if (Number.isNaN(v) || v <= 0) {
+      showToast('Informe um valor maior que zero.', true);
       return;
     }
     const credito = pgtoForm.forma === 'Cartão de Crédito';
-    const voucher = pgtoForm.forma === 'Voucher';
-    if (voucher && !pgtoForm.codigoVoucher.trim()) {
-      alert('Informe o código do voucher.');
-      return;
-    }
     executar(async () => {
       const id = await garantirVenda();
       aplicarVenda(await api.adicionarPagamento(id, {
         forma: api.FORMA_ENUM[pgtoForm.forma],
-        valor: Math.round(v * 100) / 100,
-        parcelas: credito ? parseInt(pgtoForm.parcelas, 10) || 1 : 1,
-        codigoVoucher: voucher ? pgtoForm.codigoVoucher.trim() : null
+        valor: v,
+        parcelas: credito ? parseInt(pgtoForm.parcelas, 10) || 1 : 1
       }));
-      setPgtoForm((prev) => ({ ...prev, valor: '', codigoVoucher: '' }));
+      setPgtoForm((prev) => ({ ...prev, valor: '' }));
     });
   };
 
   /** Liga/desliga o Renova no backend; a venda volta reprecificada (nada é calculado no front). */
   const handleAplicarRenova = async (ativo) => {
     if (!vendaId) return;
+    const numero = numeroVoucher.trim();
+    if (ativo && !numero) return;
     setErro('');
     setRenovaBloqueio('');
     setCarregando(true);
     try {
-      aplicarVenda(await api.aplicarRenova(vendaId, ativo));
+      const v = await api.aplicarRenova(vendaId, ativo, ativo ? numero : undefined);
+      aplicarVenda(v);
+      setNumeroVoucher(v.codigoVoucher || '');
     } catch (e) {
       const msg = e.mensagem || e.message || 'Falha ao aplicar o Renova.';
-      if (e.status === 422) setRenovaBloqueio(msg); // ex.: "Renova não disponível para plano pré-pago."
+      // 409: "Voucher já usado na venda #id"; 422: ex.: "Renova não disponível para plano pré-pago."
+      if (e.status === 409 || e.status === 422) setRenovaBloqueio(msg);
       else setErro(msg);
     } finally {
       setCarregando(false);
@@ -971,17 +974,31 @@ export default function Venda() {
 
   const handleFinalizarVenda = () => {
     if (totalItensCarrinho === 0) {
-      alert('Adicione pelo menos um item ao carrinho antes de finalizar a venda.');
+      showToast('Adicione pelo menos um item ao carrinho antes de finalizar a venda.', true);
       return;
     }
     if (avisoVenda) {
-      alert(avisoVenda);
+      showToast(avisoVenda, true);
       setAbaAtiva('PAGAMENTO');
       return;
     }
     executar(async () => {
       const id = await garantirVenda();
-      const v = await api.finalizar(id, credenciais());
+      let v;
+      try {
+        v = await api.finalizar(id, credenciais());
+      } catch (e) {
+        if (e.status !== 422) throw e;
+        // O 422 pode ser o total reprecificado: recarrega para mostrar os valores atuais e mantém a mensagem na tela
+        try {
+          aplicarVenda(await api.buscarVenda(id));
+        } catch {
+          // Falhou só a recarga: a mensagem do finalizar continua sendo a informação principal
+        }
+        setErro(e.mensagem || 'Não foi possível finalizar a venda.');
+        setAbaAtiva('PAGAMENTO');
+        return;
+      }
       const numero = String(v.numeroVenda).padStart(6, '0');
       resetarTela();
       setMensagemSucesso(`Venda #${numero} finalizada e enviada para aprovação (status ${v.status}).`);
@@ -1046,16 +1063,6 @@ export default function Venda() {
           <button type="button" onClick={() => setErro('')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
             <X size={16} />
           </button>
-        </div>
-      )}
-
-      {avisoVenda && (
-        <div role="status" style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          background: 'rgba(245, 158, 11, 0.12)', border: '1px solid var(--warn, #f59e0b)',
-          color: 'var(--warn, #f59e0b)', padding: '12px 18px', borderRadius: 8, fontSize: 13.5, fontWeight: 600
-        }}>
-          <span>{avisoVenda}</span>
         </div>
       )}
 
@@ -1850,15 +1857,8 @@ export default function Venda() {
                     />
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Mensalidade na fatura (R$):</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0,00"
-                        value={servicoForm.valorMensalidade}
-                        onChange={(e) => setServicoForm((prev) => ({ ...prev, valorMensalidade: e.target.value }))}
-                        style={{ ...inputStyleGlobal, width: 110, textAlign: 'right' }}
-                      />
+                      <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Valor do serviço:</span>
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{formatadorMoeda.format(0)}</span>
                     </div>
                   </div>
                 </div>
@@ -2062,9 +2062,14 @@ export default function Venda() {
                             )}
                           </td>
                           <td style={{ padding: '12px 16px', textAlign: 'right' }} className="mono">
-                            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
-                              {formatadorMoeda.format(item.mensalidadeFatura)}/mês
-                            </span>
+                            {/* Sem campo no formulário: só vendas antigas trazem mensalidade */}
+                            {item.mensalidadeFatura > 0 ? (
+                              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                                {formatadorMoeda.format(item.mensalidadeFatura)}/mês
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-faint)' }}>—</span>
+                            )}
                           </td>
                           <td style={{ textAlign: 'center', padding: '12px 8px' }}>
                             <button
@@ -2286,20 +2291,6 @@ export default function Venda() {
                   </select>
                 </div>
 
-                {pgtoForm.forma === 'Voucher' && (
-                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                    <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Código do voucher:</label>
-                    <input
-                      type="text"
-                      maxLength={60}
-                      placeholder="Digite o código do voucher..."
-                      value={pgtoForm.codigoVoucher}
-                      onChange={(e) => setPgtoForm((prev) => ({ ...prev, codigoVoucher: e.target.value }))}
-                      style={{ ...inputStyleGlobal, maxWidth: 280 }}
-                    />
-                  </div>
-                )}
-
                 {pgtoForm.forma === 'Cartão de Crédito' && (
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                     <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Parcelamento:</label>
@@ -2319,13 +2310,24 @@ export default function Venda() {
                   <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Valor:</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       style={{ ...inputStyleGlobal, maxWidth: 220 }}
                       placeholder="0,00"
                       value={pgtoForm.valor}
                       onChange={(e) => setPgtoForm((prev) => ({ ...prev, valor: e.target.value }))}
                     />
+                    {/* No parcelado o campo é a entrada, que não tem saldo fixo */}
+                    {!vendaParcelada && (
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={carregando || !vendaEditavel || saldoBackend <= 0}
+                        onClick={() => setPgtoForm((prev) => ({ ...prev, valor: saldoBackend.toFixed(2).replace('.', ',') }))}
+                      >
+                        Usar saldo
+                      </button>
+                    )}
                     <button
                       type="submit"
                       className="btn solid"
@@ -2348,43 +2350,66 @@ export default function Venda() {
 
               {vendaParcelada && (
                 <div>
-                  <button
-                    type="button"
-                    className="btn solid"
-                    onClick={handleFinanciarSaldo}
-                    disabled={carregando || !vendaEditavel || saldoRestante <= 0}
-                    style={{ padding: '10px 18px', fontWeight: 700 }}
-                  >
-                    Financiar saldo em {pagtoVenda.parcelasCondicao}x no cartão
-                  </button>
+                  {saldoBackend === 0 && pagamentos.some((p) => p.tipo === 'FINANCIADO') ? (
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--good, #22c55e)' }}>
+                      Saldo financiado em {pagtoVenda.parcelasCondicao}x de {formatadorMoeda.format(pagtoVenda.valorParcela || 0)}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn solid"
+                      onClick={handleFinanciarSaldo}
+                      disabled={carregando || !vendaEditavel || saldoBackend <= 0}
+                      style={{ padding: '10px 18px', fontWeight: 700 }}
+                    >
+                      Financiar saldo em {pagtoVenda.parcelasCondicao}x no cartão
+                    </button>
+                  )}
                 </div>
               )}
 
-              {/* Renova: Desconto fabricante (do backend) + Voucher (pagamento) */}
+              {/* Renova: número do voucher + desconto fabricante (do backend) */}
               <fieldset style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '14px 18px', maxWidth: 840, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <legend style={{ padding: '0 8px', color: 'var(--accent, #a855f7)', fontSize: 13, fontWeight: 700 }}>Renova</legend>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16 }}>
-                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Desconto fabricante:</label>
-                  <div style={{ fontSize: 13 }}>
-                    <span className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>
-                      {renovaAtivo ? formatadorMoeda.format(descontoFabricante || 0) : '—'}
-                    </span>
-                    <span style={{ color: 'var(--text-faint)', marginLeft: 8 }}>
-                      {renovaAtivo ? '(já embutido no preço Renova dos aparelhos)' : '(preenchido pelo sistema ao aplicar o Renova)'}
-                    </span>
-                  </div>
+                  <label htmlFor="numero-voucher" style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Número do voucher:</label>
+                  {renovaAtivo ? (
+                    temVoucher ? (
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{codigoVoucherVenda}</span>
+                    ) : (
+                      <span style={{ fontSize: 12.5, color: COR_SEM_PRECO, fontWeight: 600 }}>
+                        Venda com Renova sem número do voucher: remova o Renova e aplique de novo com o número.
+                      </span>
+                    )
+                  ) : (
+                    <input
+                      id="numero-voucher"
+                      type="text"
+                      maxLength={60}
+                      placeholder="Digite o número do voucher..."
+                      value={numeroVoucher}
+                      disabled={!vendaEditavel}
+                      onChange={(e) => {
+                        setNumeroVoucher(e.target.value);
+                        setRenovaBloqueio('');
+                      }}
+                      style={{ ...inputStyleGlobal, maxWidth: 280 }}
+                    />
+                  )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16 }}>
-                  <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Voucher:</label>
-                  <span style={{ fontSize: 13, color: temVoucher ? 'var(--text)' : 'var(--text-faint)' }}>
-                    {temVoucher
-                      ? pagamentos.filter((p) => p.formaEnum === 'VOUCHER')
-                        .map((p) => `${p.codigoVoucher || 's/ código'} (${formatadorMoeda.format(p.valor)})`).join(' · ')
-                      : 'Lance o voucher acima, na forma de pagamento "Voucher".'}
-                  </span>
-                </div>
+                {renovaAtivo && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16 }}>
+                    <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>Desconto fabricante:</label>
+                    <div style={{ fontSize: 13 }}>
+                      <span className="mono" style={{ fontWeight: 700, color: 'var(--text)' }}>
+                        {formatadorMoeda.format(descontoFabricante || 0)}
+                      </span>
+                      <span style={{ color: 'var(--text-faint)', marginLeft: 8 }}>(já embutido no preço Renova)</span>
+                    </div>
+                  </div>
+                )}
 
                 {itensPorCategoria.PRODUTO_VIVO.length > 0 && (
                   <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'start', gap: 16 }}>
@@ -2403,24 +2428,33 @@ export default function Venda() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'start', gap: 16 }}>
                   <div />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, margin: 0, fontSize: 13, color: 'var(--text)', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={renovaAtivo}
-                        disabled={carregando || !vendaId || (!renovaAtivo && (!temVoucher || !temAparelhoRenova || Boolean(renovaBloqueio)))}
-                        onChange={(e) => handleAplicarRenova(e.target.checked)}
-                      />
-                      <b>Aplicar Renova</b>
-                    </label>
-                    {renovaBloqueio ? (
-                      <span style={{ fontSize: 12.5, color: COR_SEM_PRECO, fontWeight: 600 }}>{renovaBloqueio}</span>
-                    ) : !renovaAtivo && !temAparelhoRenova ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                    {renovaBloqueio && (
+                      <span role="alert" style={{ fontSize: 12.5, color: 'var(--bad, #ef4444)', fontWeight: 600 }}>{renovaBloqueio}</span>
+                    )}
+                    {renovaAtivo ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={carregando || !vendaEditavel}
+                        onClick={() => handleAplicarRenova(false)}
+                      >
+                        Remover Renova
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn solid"
+                        disabled={carregando || !vendaEditavel || !temAparelhoRenova || !numeroVoucher.trim()}
+                        onClick={() => handleAplicarRenova(true)}
+                      >
+                        Aplicar Renova
+                      </button>
+                    )}
+                    {renovaAtivo ? (
+                      <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Remover o Renova limpa o número e os aparelhos voltam para a Regular.</span>
+                    ) : !temAparelhoRenova ? (
                       <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Adicione um aparelho com plano para usar o Renova.</span>
-                    ) : !renovaAtivo && !temVoucher ? (
-                      <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Exige um pagamento por voucher.</span>
-                    ) : renovaAtivo ? (
-                      <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Remover o voucher desliga o Renova e os aparelhos voltam para a Regular.</span>
                     ) : null}
                   </div>
                 </div>
@@ -2469,6 +2503,16 @@ export default function Venda() {
                   </tbody>
                 </table>
               </div>
+
+              {avisoVenda && (
+                <div role="status" style={{
+                  maxWidth: 840, boxSizing: 'border-box',
+                  background: 'rgba(245, 158, 11, 0.12)', border: '1px solid var(--warn, #f59e0b)',
+                  color: 'var(--warn, #f59e0b)', padding: '12px 18px', borderRadius: 8, fontSize: 13.5, fontWeight: 600
+                }}>
+                  {avisoVenda}
+                </div>
+              )}
 
               <ResumoPagamento
                 pagto={pagtoVenda}
