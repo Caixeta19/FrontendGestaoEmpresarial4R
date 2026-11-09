@@ -419,6 +419,9 @@ export default function Venda() {
   const [senha, setSenha] = useState('');
   const [erroSenha, setErroSenha] = useState('');
   const senhaRef = useRef(null);
+  // MONTAGEM: botão "Lançar venda" confere a venda. AUTENTICACAO: "Confirmar lançamento" envia vendedor e senha.
+  const [etapaLancamento, setEtapaLancamento] = useState('MONTAGEM');
+  const autenticando = etapaLancamento === 'AUTENTICACAO';
 
   const showToast = useToast();
 
@@ -442,7 +445,7 @@ export default function Venda() {
   const [erro, setErro] = useState('');
   const [acaoAutenticacao, setAcaoAutenticacao] = useState(null); // ação à espera da senha; null = modal fechado
   const [erroAutenticacao, setErroAutenticacao] = useState('');
-  const [autenticando, setAutenticando] = useState(false);
+  const [autenticandoStatus, setAutenticandoStatus] = useState(false);
   const [clientesSugeridos, setClientesSugeridos] = useState([]);
   const [aparelhosSugeridos, setAparelhosSugeridos] = useState([]);
   const [acessoriosSugeridos, setAcessoriosSugeridos] = useState([]);
@@ -669,7 +672,9 @@ export default function Venda() {
     }
   };
 
+  /** Toda resposta que muda a venda passa por aqui: a venda mudou, então o vendedor confere de novo antes de lançar. */
   const aplicarVenda = (v) => {
+    setEtapaLancamento('MONTAGEM');
     const tela = api.vendaParaTela(v);
     setVendaId(v.id);
     setNumeroVenda(tela.numero);
@@ -723,6 +728,7 @@ export default function Venda() {
     setItensPorCategoria({ PRODUTO_VIVO: [], SERVICO_VIVO: [], ACESSORIO: [], RECARGA: [] });
     setSenha('');
     setErroSenha('');
+    setEtapaLancamento('MONTAGEM');
     setAbaAtiva('INICIO');
     inicioSalvoRef.current = { clienteId: null, filialId: null };
   };
@@ -1005,8 +1011,8 @@ export default function Venda() {
     setAbaAtiva(aba);
   };
 
-  /** Confere se a venda pode ser fechada e só então pede a autenticação do vendedor. */
-  const handleSalvarVenda = () => {
+  /** Primeiro clique: confere a venda e, com tudo certo, pede a autenticação do vendedor na aba Início. */
+  const handleLancarVenda = () => {
     if (!cliente?.id || !pdvId) {
       recusarSalvar('Selecione o cliente e o PDV na aba Início.', 'INICIO');
       return;
@@ -1029,31 +1035,63 @@ export default function Venda() {
     }
     executar(async () => {
       await garantirVenda();
-      abrirAutenticacao('FINALIZAR');
+      setErroSenha('');
+      setEtapaLancamento('AUTENTICACAO');
+      setAbaAtiva('INICIO');
     });
   };
 
-  const confirmarFinalizacao = async (credenciaisModal) => {
-    let v;
-    try {
-      v = await api.finalizar(vendaId, credenciaisModal);
-    } catch (e) {
-      if (e.status !== 422) throw e;
-      // O 422 pode ser o total reprecificado: recarrega para mostrar os valores atuais e mantém a mensagem na tela
-      setAcaoAutenticacao(null);
-      try {
-        aplicarVenda(await api.buscarVenda(vendaId));
-      } catch {
-        // Falhou só a recarga: a mensagem do finalizar continua sendo a informação principal
-      }
-      setErro(e.mensagem || 'Não foi possível finalizar a venda.');
-      setAbaAtiva('PAGAMENTO');
+  const voltarParaMontagem = () => {
+    setErroSenha('');
+    setEtapaLancamento('MONTAGEM');
+  };
+
+  const pedirSenha = (mensagem) => {
+    setErroSenha(mensagem);
+    setAbaAtiva('INICIO');
+    setTimeout(() => senhaRef.current?.focus(), 0);
+  };
+
+  /** Segundo clique (ou Enter na senha): lança a venda no nome do vendedor autenticado. */
+  const handleConfirmarLancamento = async () => {
+    if (!vendedorId || !emailLogin.trim()) {
+      setErroSenha('Selecione o vendedor.');
+      setAbaAtiva('INICIO');
       return;
     }
-    const numero = String(v.numeroVenda).padStart(6, '0');
-    setAcaoAutenticacao(null);
-    resetarTela();
-    mostrarSucesso(`Venda #${numero} finalizada por ${v.finalizadoPorNome || v.vendedorNome} e enviada para aprovação.`, 6000);
+    if (!senha) {
+      pedirSenha('Informe a senha do vendedor.');
+      return;
+    }
+    setErro('');
+    setErroSenha('');
+    setCarregando(true);
+    try {
+      const v = await api.finalizar(vendaId, credenciais());
+      const numero = String(v.numeroVenda).padStart(6, '0');
+      resetarTela();
+      mostrarSucesso(`Venda #${numero} lançada por ${v.finalizadoPorNome || v.vendedorNome}.`, 6000);
+    } catch (e) {
+      const msg = e.mensagem || e.message || 'Falha ao comunicar com o servidor.';
+      if (e.status === 401) {
+        setSenha('');
+        pedirSenha('Senha do vendedor inválida.');
+      } else if (e.status === 422) {
+        // O 422 pode ser o total reprecificado: recarrega para mostrar os valores atuais e mantém a mensagem na tela
+        setEtapaLancamento('MONTAGEM');
+        try {
+          aplicarVenda(await api.buscarVenda(vendaId));
+        } catch {
+          // Falhou só a recarga: a mensagem do finalizar continua sendo a informação principal
+        }
+        setErro(msg);
+        setAbaAtiva('PAGAMENTO');
+      } else {
+        setErro(msg);
+      }
+    } finally {
+      setCarregando(false);
+    }
   };
 
   const abrirAutenticacao = (acao) => {
@@ -1079,10 +1117,9 @@ export default function Venda() {
   const handleConfirmarAutenticacao = async (credenciaisModal) => {
     setErro('');
     setErroAutenticacao('');
-    setAutenticando(true);
+    setAutenticandoStatus(true);
     try {
-      if (acaoAutenticacao === 'FINALIZAR') await confirmarFinalizacao(credenciaisModal);
-      else await confirmarMudancaStatus(acaoAutenticacao, credenciaisModal);
+      await confirmarMudancaStatus(acaoAutenticacao, credenciaisModal);
     } catch (e) {
       const msg = e.mensagem || e.message || 'Falha ao comunicar com o servidor.';
       if (e.status === 422) {
@@ -1092,7 +1129,7 @@ export default function Venda() {
         setErroAutenticacao(msg);
       }
     } finally {
-      setAutenticando(false);
+      setAutenticandoStatus(false);
     }
   };
 
@@ -1100,6 +1137,15 @@ export default function Venda() {
     const login = loginDoToken()?.toLowerCase();
     return vendedores.find((v) => login && v.login?.toLowerCase() === login)?.id ?? null;
   }, [vendedores]);
+
+  // Cliente ou PDV trocados na aba Início também mudam a venda
+  useEffect(() => {
+    setEtapaLancamento('MONTAGEM');
+  }, [cliente?.id, pdvId]);
+
+  useEffect(() => {
+    if (etapaLancamento === 'AUTENTICACAO' && abaAtiva === 'INICIO') senhaRef.current?.focus();
+  }, [etapaLancamento, abaAtiva]);
 
   // O select começa no usuário logado, assim que a lista de vendedores chega
   useEffect(() => {
@@ -1330,7 +1376,8 @@ export default function Venda() {
                 borderRadius: 8,
                 padding: '18px 24px',
                 marginTop: 12,
-                border: '1px solid var(--line)',
+                border: autenticando ? '2px solid var(--accent, #c026d3)' : '1px solid var(--line)',
+                boxShadow: autenticando ? '0 0 0 4px rgba(192, 38, 211, 0.15)' : 'none',
                 background: 'var(--panel-2)',
                 width: '100%',
                 maxWidth: 760,
@@ -1339,6 +1386,11 @@ export default function Venda() {
                 <legend style={{ padding: '0 8px', color: 'var(--accent, #c026d3)', fontSize: 13, fontWeight: 700 }}>
                   Autenticação do vendedor:
                 </legend>
+                {autenticando && (
+                  <p style={{ margin: '0 0 14px', color: 'var(--accent, #c026d3)', fontSize: 13, fontWeight: 600 }}>
+                    Confirme com a senha do vendedor para lançar a venda
+                  </p>
+                )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', alignItems: 'center', gap: 14, margin: 0 }}>
                     <label style={{ margin: 0, color: 'var(--text)' }}>E-mail / Login:</label>
@@ -1359,6 +1411,9 @@ export default function Venda() {
                         placeholder="Senha do vendedor..."
                         value={senha}
                         onChange={(e) => { setSenha(e.target.value); setErroSenha(''); }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && autenticando && !carregando) handleConfirmarLancamento();
+                        }}
                         style={{ ...inputStyleGlobal, width: '100%' }}
                       />
                       {erroSenha && (
@@ -2648,9 +2703,15 @@ export default function Venda() {
             </span>
           </div>
 
+          {autenticando && (
+            <button type="button" className="btn ghost" onClick={voltarParaMontagem} disabled={carregando}
+              style={{ padding: '12px 20px', fontSize: 14, borderRadius: 8, fontWeight: 600 }}>
+              Voltar
+            </button>
+          )}
           <button
             type="button"
-            onClick={handleSalvarVenda}
+            onClick={autenticando ? handleConfirmarLancamento : handleLancarVenda}
             disabled={carregando || status !== 'ABERTA'}
             className="btn solid"
             style={{ 
@@ -2664,7 +2725,9 @@ export default function Venda() {
               cursor: carregando ? 'not-allowed' : 'pointer'
             }}
           >
-            {carregando ? 'A gravar venda...' : 'Salvar venda'}
+            {carregando
+              ? (autenticando ? 'Lançando venda...' : 'Conferindo venda...')
+              : (autenticando ? 'Confirmar lançamento' : 'Lançar venda')}
           </button>
         </div>
       </div>
@@ -2677,7 +2740,7 @@ export default function Venda() {
         onConfirmar={handleConfirmarAutenticacao}
         onClose={() => setAcaoAutenticacao(null)}
         erro={erroAutenticacao}
-        carregando={autenticando}
+        carregando={autenticandoStatus}
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 12px', fontSize: 13, margin: '10px 0 16px' }}>
           <span style={{ color: 'var(--text-faint)' }}>Total</span>
