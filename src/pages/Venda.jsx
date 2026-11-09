@@ -12,17 +12,16 @@ const CATEGORIAS_ITENS = [
 ];
 
 // Formas que cada condição aceita. O crédito do parcelado é a linha FINANCIADO, criada pelo backend.
-const FORMAS_PIX = ['PIX', 'Vivo Pay', 'Voucher'];
+const FORMAS_PIX = ['PIX', 'Vivo Pay'];
 const FORMAS_A_VISTA = [
   'Cartão de Crédito',
   'Cartão de Débito',
   'Dinheiro',
   'PIX',
   'Vivo Pay',
-  'Boleto Bancário / Convênio',
-  'Voucher'
+  'Boleto Bancário / Convênio'
 ];
-const FORMAS_ENTRADA = ['Dinheiro', 'PIX', 'Vivo Pay', 'Cartão de Débito', 'Voucher'];
+const FORMAS_ENTRADA = ['Dinheiro', 'PIX', 'Vivo Pay', 'Cartão de Débito'];
 const formasDaCondicao = (condicao) => {
   if (condicao === 'PIX') return FORMAS_PIX;
   return api.ehParcelado(condicao) ? FORMAS_ENTRADA : FORMAS_A_VISTA;
@@ -471,8 +470,7 @@ export default function Venda() {
   const [pgtoForm, setPgtoForm] = useState({
     forma: '',
     valor: '',
-    parcelas: '1x',
-    codigoVoucher: ''
+    parcelas: '1x'
   });
 
   // =========================================================================
@@ -904,20 +902,14 @@ export default function Venda() {
       return;
     }
     const credito = pgtoForm.forma === 'Cartão de Crédito';
-    const voucher = pgtoForm.forma === 'Voucher';
-    if (voucher && !pgtoForm.codigoVoucher.trim()) {
-      alert('Informe o código do voucher.');
-      return;
-    }
     executar(async () => {
       const id = await garantirVenda();
       aplicarVenda(await api.adicionarPagamento(id, {
         forma: api.FORMA_ENUM[pgtoForm.forma],
         valor: Math.round(v * 100) / 100,
-        parcelas: credito ? parseInt(pgtoForm.parcelas, 10) || 1 : 1,
-        codigoVoucher: voucher ? pgtoForm.codigoVoucher.trim() : null
+        parcelas: credito ? parseInt(pgtoForm.parcelas, 10) || 1 : 1
       }));
-      setPgtoForm((prev) => ({ ...prev, valor: '', codigoVoucher: '' }));
+      setPgtoForm((prev) => ({ ...prev, valor: '' }));
     });
   };
 
@@ -2285,20 +2277,6 @@ export default function Venda() {
                     ))}
                   </select>
                 </div>
-
-                {pgtoForm.forma === 'Voucher' && (
-                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
-                    <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Código do voucher:</label>
-                    <input
-                      type="text"
-                      maxLength={60}
-                      placeholder="Digite o código do voucher..."
-                      value={pgtoForm.codigoVoucher}
-                      onChange={(e) => setPgtoForm((prev) => ({ ...prev, codigoVoucher: e.target.value }))}
-                      style={{ ...inputStyleGlobal, maxWidth: 280 }}
-                    />
-                  </div>
-                )}
 
                 {pgtoForm.forma === 'Cartão de Crédito' && (
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
