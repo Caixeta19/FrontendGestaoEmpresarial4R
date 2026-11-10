@@ -452,7 +452,6 @@ export default function Venda() {
   const [erro, setErro] = useState('');
   const [clientesSugeridos, setClientesSugeridos] = useState([]);
   const [aparelhosSugeridos, setAparelhosSugeridos] = useState([]);
-  const [acessoriosSugeridos, setAcessoriosSugeridos] = useState([]);
   const inicioSalvoRef = useRef({ clienteId: null, filialId: null });
 
   // Carrinho
@@ -507,10 +506,13 @@ export default function Venda() {
     serialConfirmado: false
   });
 
-  // Formulário de Acessório
-  const [buscaAcessorio, setBuscaAcessorio] = useState('');
-  const [acessorioSelecionado, setAcessorioSelecionado] = useState(null);
-  const [qtdAcessorio, setQtdAcessorio] = useState(1);
+  // Acessório: entra pelo IMEI/serial lido (1 unidade por leitura)
+  const [serialAcessorio, setSerialAcessorio] = useState('');
+  const [leituraAcessorio, setLeituraAcessorio] = useState(null); // { tipo, produtoId, nome, sku, serial, quantidadeDisponivel }
+  const [erroAcessorio, setErroAcessorio] = useState('');
+  const [lendoSerialAcessorio, setLendoSerialAcessorio] = useState(false);
+  const [adicionarDiretoAoBipar, setAdicionarDiretoAoBipar] = useState(false);
+  const serialAcessorioRef = useRef(null);
 
   // Pagamentos
   const [pagamentos, setPagamentos] = useState([]);
@@ -606,9 +608,10 @@ export default function Venda() {
   }, [servicoForm.servico]);
 
   // Acessório: mesma consulta, sem plano (grupo SEM_PLANO)
+  const acessorioLido = leituraAcessorio?.tipo === 'ACESSORIO' ? leituraAcessorio : null;
   const precoAcessorio = usePrecoItem({
-    estoqueId: acessorioSelecionado?.produtoId,
-    habilitado: Boolean(acessorioSelecionado),
+    estoqueId: acessorioLido?.produtoId,
+    habilitado: Boolean(acessorioLido),
   });
 
   // Preço do aparelho na tabela vigente (sempre Regular): precisa do aparelho e do plano (ou "Sem plano")
@@ -639,15 +642,10 @@ export default function Venda() {
     return () => { ativo = false; clearTimeout(t); };
   }, [buscaSerialProduto, aparelhoSelecionado]);
 
+  // Aba Acessório aberta: o campo do serial fica com foco para o leitor de código de barras.
   useEffect(() => {
-    const termo = buscaAcessorio.trim();
-    if (acessorioSelecionado || termo.length < 2) { setAcessoriosSugeridos([]); return undefined; }
-    let ativo = true;
-    const t = setTimeout(() => {
-      api.buscarAcessorios(termo).then((r) => ativo && setAcessoriosSugeridos(r)).catch(() => ativo && setAcessoriosSugeridos([]));
-    }, 300);
-    return () => { ativo = false; clearTimeout(t); };
-  }, [buscaAcessorio, acessorioSelecionado]);
+    if (abaAtiva === 'ACESSORIO') serialAcessorioRef.current?.focus();
+  }, [abaAtiva]);
 
   const handleConfirmarSerialServico = () => {
     if (!servicoForm.simcard4g.trim()) {
@@ -913,26 +911,56 @@ export default function Venda() {
     });
   };
 
-  const handleAdicionarAcessorio = (e) => {
-    e.preventDefault();
-    if (!acessorioSelecionado) {
-      alert('Selecione um acessório da lista de busca.');
-      return;
-    }
-    if (precoAcessorio.status !== 'ok') return;
-    executar(async () => {
+  const focarSerialAcessorio = () => setTimeout(() => serialAcessorioRef.current?.focus(), 0);
+
+  /** Grava 1 unidade do acessório lido. Erros (409 já reservado, 422 aba/preço) ficam embaixo do campo. */
+  const adicionarAcessorioLido = async (leitura) => {
+    if (!leitura || leitura.tipo !== 'ACESSORIO') return;
+    setErroAcessorio('');
+    setCarregando(true);
+    try {
       const gravado = await enviarItem({
         categoria: 'ACESSORIO',
-        produtoId: acessorioSelecionado.produtoId,
-        descricaoProduto: acessorioSelecionado.nome,
-        quantidade: Number(qtdAcessorio) || 1,
-        valorUnitario: precoAcessorio.preco.preco // informativo: o backend recalcula pela tabela vigente
+        imeiOuSerial: leitura.serial,
+        quantidade: 1,
+        descricaoProduto: leitura.nome
       });
       avisarItemGravado(gravado, 'Acessório');
-      setBuscaAcessorio('');
-      setAcessorioSelecionado(null);
-      setQtdAcessorio(1);
-    });
+      setSerialAcessorio('');
+      setLeituraAcessorio(null);
+    } catch (e) {
+      setErroAcessorio(e.mensagem || e.message || 'Falha ao adicionar o acessório.');
+    } finally {
+      setCarregando(false);
+      focarSerialAcessorio();
+    }
+  };
+
+  /** Enter no campo (o leitor de código de barras envia Enter): consulta o serial exato no estoque. */
+  const handleLerSerialAcessorio = async (e) => {
+    e.preventDefault();
+    const serial = serialAcessorio.trim();
+    if (!serial || lendoSerialAcessorio) return;
+    setErroAcessorio('');
+    setLeituraAcessorio(null);
+    setLendoSerialAcessorio(true);
+    try {
+      const leitura = await api.lerSerialEstoque(serial);
+      if (!leitura) {
+        setErroAcessorio('Serial não encontrado ou indisponível no estoque.');
+        setSerialAcessorio('');
+        return;
+      }
+      setLeituraAcessorio(leitura);
+      if (leitura.tipo === 'ACESSORIO' && adicionarDiretoAoBipar) {
+        await adicionarAcessorioLido(leitura);
+      }
+    } catch (err) {
+      setErroAcessorio(err.mensagem || err.message || 'Falha ao consultar o serial.');
+    } finally {
+      setLendoSerialAcessorio(false);
+      focarSerialAcessorio();
+    }
   };
 
   const handleRemoverItem = (categoria, itemId) => {
@@ -2276,87 +2304,90 @@ export default function Venda() {
           {/* ================= 4. ACESSÓRIO ================= */}
           {abaAtiva === 'ACESSORIO' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <form onSubmit={handleAdicionarAcessorio} style={{ display: 'flex', gap: 12, alignItems: 'flex-end', maxWidth: 840 }}>
-                <div style={{ flex: 1, position: 'relative' }}>
-                  <label style={{ display: 'block', fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 6 }}>
-                    Buscar Acessório (Capa, Película, Cabo, Fone):
-                  </label>
+              <form onSubmit={handleLerSerialAcessorio} style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 840 }}>
+                <label htmlFor="serial-acessorio" style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
+                  IMEI / Serial do acessório:
+                </label>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input
+                    id="serial-acessorio"
+                    ref={serialAcessorioRef}
                     type="text"
-                    placeholder="Digite o nome ou SKU do acessório..."
-                    value={acessorioSelecionado ? `${acessorioSelecionado.nome} — (${acessorioSelecionado.sku})` : buscaAcessorio}
+                    className="mono"
+                    autoComplete="off"
+                    placeholder="Bipe ou digite o serial e tecle Enter"
+                    value={serialAcessorio}
                     onChange={(e) => {
-                      setAcessorioSelecionado(null);
-                      setBuscaAcessorio(e.target.value);
+                      setSerialAcessorio(e.target.value);
+                      setErroAcessorio('');
+                      if (leituraAcessorio) setLeituraAcessorio(null);
                     }}
-                    style={inputStyleGlobal}
+                    readOnly={lendoSerialAcessorio}
+                    style={{ ...inputStyleGlobal, flex: '1 1 260px' }}
                   />
-                  {!acessorioSelecionado && acessoriosSugeridos.length > 0 && (
-                    <div style={{
-                      position: 'absolute',
-                      top: 'calc(100% + 4px)',
-                      left: 0,
-                      right: 0,
-                      zIndex: 9999,
-                      background: 'var(--panel)',
-                      border: '1px solid var(--line)',
-                      borderRadius: 6,
-                      maxHeight: 180,
-                      overflowY: 'auto'
-                    }}>
-                      {acessoriosSugeridos.map((ac) => (
-                        <div
-                          key={ac.sku}
-                          style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--line-soft)', display: 'flex', justifyContent: 'space-between' }}
-                          onMouseDown={() => {
-                            setAcessorioSelecionado(ac);
-                            setBuscaAcessorio(`${ac.nome} — (${ac.sku})`);
-                          }}
-                        >
-                          <div>
-                            <b style={{ color: 'var(--text)', fontSize: 13 }}>{ac.nome}</b>
-                            <div style={{ color: 'var(--text-faint)', fontSize: 11.5 }}>SKU: {ac.sku}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <button
+                    type="submit"
+                    className="btn"
+                    disabled={lendoSerialAcessorio || !serialAcessorio.trim()}
+                    style={{ height: 36, padding: '0 16px', borderRadius: 6, opacity: lendoSerialAcessorio || !serialAcessorio.trim() ? 0.5 : 1 }}
+                  >
+                    {lendoSerialAcessorio ? 'Consultando...' : 'Consultar'}
+                  </button>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-dim)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={adicionarDiretoAoBipar}
+                      onChange={(e) => { setAdicionarDiretoAoBipar(e.target.checked); focarSerialAcessorio(); }}
+                    />
+                    Adicionar direto ao bipar
+                  </label>
                 </div>
-
-                <div style={{ width: 85 }}>
-                  <label style={{ display: 'block', fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 6 }}>Qtd.</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={qtdAcessorio}
-                    onChange={(e) => setQtdAcessorio(Math.max(1, Number(e.target.value)))}
-                    style={inputStyleGlobal}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="btn solid"
-                  disabled={carregando || !acessorioSelecionado || precoAcessorio.status !== 'ok'}
-                  style={{
-                    background: 'var(--accent, #c026d3)',
-                    color: '#fff',
-                    border: 'none',
-                    height: 36,
-                    padding: '0 18px',
-                    borderRadius: 6,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    opacity: carregando || !acessorioSelecionado || precoAcessorio.status !== 'ok' ? 0.5 : 1
-                  }}
-                >
-                  Adicionar
-                </button>
+                {erroAcessorio && (
+                  <span role="alert" style={{ fontSize: 12.5, color: 'var(--bad)' }}>{erroAcessorio}</span>
+                )}
               </form>
 
-              {acessorioSelecionado && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 840 }}>
-                  <PainelPreco estado={precoAcessorio} vazio="Selecione o acessório" />
+              {leituraAcessorio?.tipo === 'APARELHO' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', maxWidth: 840, padding: '10px 14px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, color: 'var(--text)' }}>
+                  <span>Este IMEI é de um aparelho: use a aba Produto Vivo.</span>
+                  <button type="button" className="btn" onClick={() => setAbaAtiva('PRODUTO_VIVO')} style={{ height: 30, padding: '0 12px', borderRadius: 6 }}>
+                    Ir para Produto Vivo
+                  </button>
+                </div>
+              )}
+
+              {acessorioLido && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 840, padding: '14px 16px', border: '1px solid var(--line)', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <b style={{ color: 'var(--text)', fontSize: 14 }}>{acessorioLido.nome}</b>
+                      <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>
+                        Serial: <span className="mono">{acessorioLido.serial}</span>
+                        {acessorioLido.sku ? <> · SKU: <span className="mono">{acessorioLido.sku}</span></> : null}
+                        {acessorioLido.quantidadeDisponivel != null ? ` · ${acessorioLido.quantidadeDisponivel} em estoque` : null}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn solid"
+                      onClick={() => adicionarAcessorioLido(acessorioLido)}
+                      disabled={carregando || precoAcessorio.status !== 'ok'}
+                      style={{
+                        background: 'var(--accent, #c026d3)',
+                        color: '#fff',
+                        border: 'none',
+                        height: 36,
+                        padding: '0 18px',
+                        borderRadius: 6,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        opacity: carregando || precoAcessorio.status !== 'ok' ? 0.5 : 1
+                      }}
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+                  <PainelPreco estado={precoAcessorio} vazio="Consultando o preço do acessório" />
                 </div>
               )}
 
@@ -2365,7 +2396,7 @@ export default function Venda() {
                   <thead>
                     <tr style={{ background: 'var(--panel-2)', color: 'var(--text-faint)', borderBottom: '1px solid var(--line)' }}>
                       <th style={{ padding: '12px 16px' }}>Descrição</th>
-                      <th style={{ padding: '12px 16px' }}>SKU / Código</th>
+                      <th style={{ padding: '12px 16px' }}>IMEI / Serial</th>
                       <th style={{ padding: '12px 16px', textAlign: 'right' }}>Qtd.</th>
                       <th style={{ padding: '12px 16px', textAlign: 'right' }}>Vlr. Unit.</th>
                       <th style={{ padding: '12px 16px', textAlign: 'right' }}>Total</th>

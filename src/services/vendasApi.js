@@ -123,22 +123,6 @@ export async function buscarAparelhos(busca) {
     .filter((a) => a.imei);
 }
 
-/** Acessórios. O preço de venda vem de consultarPreco (grupo SEM_PLANO). */
-export async function buscarAcessorios(busca) {
-  const lista = await buscarDisponiveis(busca, 30);
-  return lista
-    .filter(temCodigoAcessorio)
-    .slice(0, 8)
-    .map((s) => ({
-      produtoId: s.id,
-      nome: s.modeloComercial || 'Acessório',
-      sku: s.codigoAcessorio,
-      precoReferencia: Number(s.valorVenda ?? 0),
-      requerSerial: false,
-    }));
-}
-
-// ---------------------------------------------------------------- tabela de preços da Telefônica
 /**
  * Leitura exata de um serial/IMEI no estoque (GET /estoque-geral/disponiveis/{serial}), para o leitor de código de barras.
  * Devolve null quando o serial não existe ou não tem unidade livre (404).
