@@ -139,6 +139,32 @@ export async function buscarAcessorios(busca) {
 }
 
 // ---------------------------------------------------------------- tabela de preços da Telefônica
+/**
+ * Leitura exata de um serial/IMEI no estoque (GET /estoque-geral/disponiveis/{serial}), para o leitor de código de barras.
+ * Devolve null quando o serial não existe ou não tem unidade livre (404).
+ * tipo: 'ACESSORIO' (tem código de acessório) ou 'APARELHO'.
+ */
+export async function lerSerialEstoque(serial) {
+  const termo = String(serial ?? '').trim();
+  if (!termo) return null;
+  try {
+    const s = await request(`/estoque-geral/disponiveis/${encodeURIComponent(termo)}`);
+    if (!s) return null;
+    return {
+      tipo: temCodigoAcessorio(s) ? 'ACESSORIO' : 'APARELHO',
+      produtoId: s.id,
+      nome: s.modeloComercial || (temCodigoAcessorio(s) ? 'Acessório' : 'Aparelho'),
+      sku: s.codigoAcessorio,
+      serial: s.serial,
+      quantidadeDisponivel: numeroOuNull(s.quantidadeDisponivel),
+    };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------- tabela de preços da Telefônica
 /** Planos da tabela vigente: [{ nomePlano, grupoPlano, sistema, disponivelAlta }] */
 export async function listarPlanos(busca, disponivelAlta) {
   return comoLista(await request('/produtos/precos/planos', { params: { busca, disponivelAlta } }));
