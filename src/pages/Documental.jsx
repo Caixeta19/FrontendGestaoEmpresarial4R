@@ -662,6 +662,10 @@ export default function Documental() {
             <Info rotulo="PDV:" valor={formData.filial} />
           </div>
 
+          {formData.alteradoPor && (
+            <Info rotulo="Protocolo salvo por último por:" valor={formData.alteradoPor} />
+          )}
+
           <div style={gradeDuas}>
             <Info rotulo="Número de Acesso:" valor={formData.numeroAcesso || '—'} mono />
             <div>
@@ -718,6 +722,31 @@ export default function Documental() {
             </div>
 
             <div style={gradeDuas}>
+              <div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Nº Protocolo GED (Portabilidade):</div>
+                <input
+                  type="text"
+                  value={formData.numeroProtocoloGedPortabilidade}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, numeroProtocoloGedPortabilidade: e.target.value }))}
+                  style={{ ...campoImportacaoEstilo, maxWidth: 360 }}
+                />
+              </div>
+              <Radios
+                rotulo="Ativação da Primeira Chamada:"
+                nome="ativacaoPrimeiraChamada"
+                opcoes={[['sim', 'Sim'], ['nao', 'Não']]}
+                valor={formData.ativacaoPrimeiraChamada}
+                onChange={(v) => setFormData((prev) => ({ ...prev, ativacaoPrimeiraChamada: v }))}
+              />
+            </div>
+
+            <div style={gradeDuas}>
+              <CampoData rotulo="Data de Ativação:" campo="dataAtivacao" formData={formData} setFormData={setFormData} />
+              <CampoData rotulo="Data de Baixa:" campo="dataBaixa" formData={formData} setFormData={setFormData} />
+            </div>
+
+            <div style={gradeDuas}>
+              <CampoData rotulo="Data Instalação:" campo="dataInstalacao" formData={formData} setFormData={setFormData} />
               <div>
                 <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Vencimento:</div>
                 <select
@@ -874,6 +903,20 @@ function Info({ rotulo, valor, forte = false, mono = false }) {
       <div className={mono ? 'mono' : undefined} style={{ fontSize: mono ? 14 : 15, fontWeight: forte ? 700 : mono ? 400 : 600, color: 'var(--text)', marginTop: 4 }}>
         {valor}
       </div>
+    </div>
+  );
+}
+
+function CampoData({ rotulo, campo, formData, setFormData }) {
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>{rotulo}</div>
+      <input
+        type="date"
+        value={formData[campo]}
+        onChange={(e) => setFormData((prev) => ({ ...prev, [campo]: e.target.value }))}
+        style={{ ...campoImportacaoEstilo, maxWidth: 360 }}
+      />
     </div>
   );
 }
