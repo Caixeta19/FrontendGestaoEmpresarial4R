@@ -214,16 +214,19 @@ input, select, textarea {
   gap: 28px;
 }
 
+/* Coluna: formulário centralizado + rodapé fixo na base */
 .login-form-wrap {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
   padding: 32px;
 }
 
 .login-form {
   width: 100%;
   max-width: 360px;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .login-form h2 {
@@ -307,6 +310,30 @@ input, select, textarea {
   color: var(--text-faint);
   font-size: 12.5px;
   text-align: center;
+}
+
+/* Rodapé da tela de login */
+.login-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.login-footer-copy {
+  color: var(--text-faint);
+}
+
+.login-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 /* ==========================================================================
