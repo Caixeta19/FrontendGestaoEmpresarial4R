@@ -761,6 +761,56 @@ export default function Documental() {
               </div>
             </div>
 
+            <div style={gradeDuas}>
+              <CampoData rotulo="Data Agendada de Instalação:" campo="dataAgendadaInstalacao" formData={formData} setFormData={setFormData} />
+              <Radios
+                rotulo="Serviço Instalado:"
+                nome="servicoInstalado"
+                opcoes={[['sim', 'Sim'], ['nao', 'Não']]}
+                valor={formData.servicoInstalado}
+                onChange={(v) => setFormData((prev) => ({ ...prev, servicoInstalado: v }))}
+              />
+            </div>
+
+            <div style={gradeDuas}>
+              <div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Armário:</div>
+                <input
+                  type="text"
+                  value={formData.armario}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, armario: e.target.value }))}
+                  style={{ ...campoImportacaoEstilo, maxWidth: 360 }}
+                />
+              </div>
+              <CampoData rotulo="Data Última Ativação:" campo="dataUltimaAtivacao" formData={formData} setFormData={setFormData} />
+            </div>
+
+            <div style={gradeDuas}>
+              <div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Status GED:</div>
+                <select
+                  value={formData.statusGed}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, statusGed: e.target.value }))}
+                  style={{ ...campoImportacaoEstilo, maxWidth: 360 }}
+                >
+                  <option value="">Automático (pelo protocolo)</option>
+                  {documental.STATUS_GED.map(({ valor, rotulo }) => (
+                    <option key={valor} value={valor}>{rotulo}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 6 }}>Motivo Reprovação:</div>
+                <input
+                  type="text"
+                  maxLength={200}
+                  value={formData.motivoReprovacao}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, motivoReprovacao: e.target.value }))}
+                  style={{ ...campoImportacaoEstilo, maxWidth: 360 }}
+                />
+              </div>
+            </div>
+
             <hr style={{ borderColor: 'var(--line)', margin: '6px 0' }} />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -834,6 +884,14 @@ export default function Documental() {
                 opcoes={[['Sim', 'Sim'], ['Não', 'Não']]}
                 valor={formData.gerarComissao}
                 onChange={(v) => setFormData((prev) => ({ ...prev, gerarComissao: v }))}
+              />
+
+              <Radios
+                rotulo="Gerar comissão de aparelho do vendedor:"
+                nome="comissaoAparelho"
+                opcoes={[['Sim', 'Sim'], ['Não', 'Não']]}
+                valor={formData.comissaoAparelho}
+                onChange={(v) => setFormData((prev) => ({ ...prev, comissaoAparelho: v }))}
               />
 
               {formData.situacaoServico === 'Cancelado' && (

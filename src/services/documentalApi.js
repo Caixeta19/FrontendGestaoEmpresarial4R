@@ -10,6 +10,14 @@ export const STATUS_BKO = [
 ];
 export const rotuloStatusBko = (v) => STATUS_BKO.find((s) => s.valor === v)?.rotulo || v || '—';
 
+/** Literais do enum StatusGed. Vazio = o relatório deduz do protocolo (GED, digitalização, cancelamento). */
+export const STATUS_GED = [
+  { valor: 'NAO_DIGITALIZADO', rotulo: 'Serviço Não digitalizado' },
+  { valor: 'AGUARDANDO_DIGITALIZACAO', rotulo: 'Aguardando digitalização do serviço' },
+  { valor: 'DIGITALIZADO', rotulo: 'Serviço Digitalizado' },
+  { valor: 'CANCELADO', rotulo: 'Serviço cancelado' },
+];
+
 /** Literais do enum TipoPlano. */
 export const TIPOS_PLANO = [
   { valor: 'CONTROLE', rotulo: 'Controle' },
@@ -87,7 +95,7 @@ export async function exportar(filtros) {
     throw new ApiError(resp.status, corpo?.mensagem || `Erro ${resp.status}`, corpo?.campos, corpo);
   }
   const nome = /filename="?([^";]+)"?/.exec(resp.headers.get('Content-Disposition') || '')?.[1]
-    || `Relatorio_Gestao_Documental_${filtros.dataInicio}_a_${filtros.dataFim}.csv`;
+    || 'gestao_documental.csv';
   baixarArquivo(await resp.blob(), nome);
   return nome;
 }
@@ -125,6 +133,13 @@ export function paraFormulario(r) {
     dataBaixa: r.dataBaixa || '',
     dataInstalacao: r.dataInstalacao || '',
     numeroProtocoloGedPortabilidade: r.numeroProtocoloGedPortabilidade || '',
+    statusGed: r.statusGed || '',
+    motivoReprovacao: r.motivoReprovacao || '',
+    servicoInstalado: r.servicoInstalado == null ? '' : r.servicoInstalado ? 'sim' : 'nao',
+    dataAgendadaInstalacao: r.dataAgendadaInstalacao || '',
+    armario: r.armario || '',
+    comissaoAparelho: r.comissaoAparelho === false ? 'Não' : 'Sim',
+    dataUltimaAtivacao: r.dataUltimaAtivacao || '',
     alteradoPor: r.alteradoPorNome || '',
   };
 }
@@ -150,6 +165,13 @@ export function paraProtocolo(f) {
     dataBaixa: texto(f.dataBaixa) ?? null,
     dataInstalacao: texto(f.dataInstalacao) ?? null,
     numeroProtocoloGedPortabilidade: texto(f.numeroProtocoloGedPortabilidade) ?? null,
+    statusGed: f.statusGed || null,
+    motivoReprovacao: texto(f.motivoReprovacao) ?? null,
+    servicoInstalado: f.servicoInstalado === '' ? null : f.servicoInstalado === 'sim',
+    dataAgendadaInstalacao: texto(f.dataAgendadaInstalacao) ?? null,
+    armario: texto(f.armario) ?? null,
+    comissaoAparelho: f.comissaoAparelho !== 'Não',
+    dataUltimaAtivacao: texto(f.dataUltimaAtivacao) ?? null,
   };
 }
 
