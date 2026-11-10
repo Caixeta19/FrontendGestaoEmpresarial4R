@@ -49,9 +49,12 @@ const OPCOES_SERVICO = [
   'Seguro',
   'SVA',
   'Troca de titularidade',
-  'Troca de numero',
-  'Troca de Aparelho Smartphone Pós'
+  'Troca de número',
+  'Troca de Aparelho'
 ];
+
+/** Tipo de linha do serviço: compõe o "Serviço" do relatório documental (ex.: "Alta Smartphone Controle"). */
+const OPCOES_TIPO_LINHA = ['Smartphone', 'Voz', 'Modem', 'Internet Fibra', 'TV GVT', 'Fixa GVT', 'Outros serviços'];
 
 const OPCOES_SISTEMA_ORIGEM = ['VIVO+', 'NEXT', 'GED'];
 const DIAS_VENCIMENTO = ['01', '06', '10', '15', '21', '26', '28'];
@@ -481,6 +484,7 @@ export default function Venda() {
   // Formulário de Serviço Vivo
   const [servicoForm, setServicoForm] = useState({
     servico: '',
+    tipoLinha: '',
     ddd: '',
     tipoPlano: '',
     planoAntigo: '',
@@ -784,7 +788,7 @@ export default function Venda() {
   };
 
   const formServicoVazio = () => ({
-    servico: '', ddd: '', tipoPlano: '', planoAntigo: '', planoNovo: '', numeroLinha: '', sistemaOrigem: '',
+    servico: '', tipoLinha: '', ddd: '', tipoPlano: '', planoAntigo: '', planoNovo: '', numeroLinha: '', sistemaOrigem: '',
     vencimentoFatura: '', simcard3g: '', simcard4g: '', clientePossuiSimcard: false,
     simcardDoado: false, descontoChip: '', cobrarChip: false, serialConfirmado: false
   });
@@ -822,6 +826,9 @@ export default function Venda() {
         descricaoProduto: descricaoCompleta,
         quantidade: 1,
         tipoServico: servicoForm.servico,
+        // Reativação não tem tipo de linha no relatório ("Reativação Controle")
+        tipoLinha: servicoForm.servico === 'Reativação' ? null : servicoForm.tipoLinha || null,
+        segmento: servicoForm.tipoPlano || null,
         ddd: servicoForm.ddd || null,
         numeroAcesso: servicoForm.numeroLinha,
         planoAntigo: planoParaVenda(servicoForm.planoAntigo),
@@ -1958,6 +1965,22 @@ export default function Venda() {
                   </select>
                 </div>
 
+                {servicoForm.servico !== 'Reativação' && (
+                  <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
+                    <label style={{ margin: 0, fontWeight: 600, color: 'var(--text)' }}>Tipo de linha:</label>
+                    <select
+                      value={servicoForm.tipoLinha}
+                      onChange={(e) => setServicoForm((prev) => ({ ...prev, tipoLinha: e.target.value }))}
+                      style={inputStyleGlobal}
+                    >
+                      <option value="">Escolha ...</option>
+                      {OPCOES_TIPO_LINHA.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {requerPlanoAntigo && (
                   <div className="field" style={{ display: 'grid', gridTemplateColumns: '180px 1fr', alignItems: 'center', gap: 16, margin: 0 }}>
                     <label style={{ margin: 0, color: 'var(--warn)', fontWeight: 600 }}>Plano Antigo / Atual:</label>
@@ -1991,6 +2014,7 @@ export default function Venda() {
                         onChange={(e) => setServicoForm((prev) => ({ ...prev, tipoPlano: e.target.value }))}
                       >
                         <option value="">Segmento...</option>
+                        <option value="Pre">Pré Pago</option>
                         <option value="Pos">Pós Pago</option>
                         <option value="Controle">Controle</option>
                         <option value="Fibra">Fibra</option>
