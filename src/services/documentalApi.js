@@ -122,6 +122,9 @@ export function paraFormulario(r) {
     numeroProtocoloGed: r.numeroProtocoloGed || '',
     vencimento: r.vencimento || '17',
     statusBko: r.statusBko || 'Nao_avaliado',
+    // Como está gravado: Procedente é final e, para sair de Improcedente, a observação precisa da correção
+    statusBkoSalvo: r.statusBko || 'Nao_avaliado',
+    observacoesSalvas: r.observacoes || '',
     liderEquipe: r.liderEquipe || '',
     observacoes: r.observacoes || '',
     observacoesImportacao: r.observacoesImportacao || '',

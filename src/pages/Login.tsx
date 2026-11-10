@@ -24,7 +24,7 @@ export default function Login({ setSession }) {
     try {
       // A função de login do seu vendasApi deve retornar o objeto com token, primeiroAcesso, etc.
       const u = await login(user.trim(), pass);
-      
+
       const dadosSessao = {
         token: u.token,
         id: u.id,
@@ -106,6 +106,30 @@ export default function Login({ setSession }) {
           </button>
           <div className="login-foot">Acesso restrito a usuários cadastrados.</div>
         </div>
+
+        <footer className="login-footer">
+          <span className="login-footer-copy">
+            © {new Date().getFullYear()} Todos os direitos reservados
+          </span>
+          <span className="login-footer-brand">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M2 12h20" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            4R Solutions
+          </span>
+        </footer>
       </div>
     </div>
   );

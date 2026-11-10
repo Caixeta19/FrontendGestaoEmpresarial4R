@@ -53,6 +53,10 @@ const OPCOES_SERVICO = [
   'Troca de Aparelho'
 ];
 
+/** Dia no horário de São Paulo, como o backend confere o cancelamento (só no dia do lançamento). */
+const diaSaoPaulo = (d) => d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+const lancadaHoje = (instante) => !instante || diaSaoPaulo(new Date(instante)) === diaSaoPaulo(new Date());
+
 /** Tipo de linha do serviço: compõe o "Serviço" do relatório documental (ex.: "Alta Smartphone Controle"). */
 const OPCOES_TIPO_LINHA = ['Smartphone', 'Voz', 'Modem', 'Internet Fibra', 'TV GVT', 'Fixa GVT', 'Outros serviços'];
 
@@ -396,6 +400,8 @@ export default function Venda() {
   const [numeroVenda, setNumeroVenda] = useState('');
   const [abaAtiva, setAbaAtiva] = useState('INICIO');
   const [status, setStatus] = useState('ABERTA');
+  /** Instante do lançamento (finalizadoEm): venda lançada só é cancelada no mesmo dia. */
+  const [lancadaEm, setLancadaEm] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState('');
   const timerSucessoRef = useRef(null);
@@ -678,6 +684,7 @@ export default function Venda() {
     setVendaId(v.id);
     setNumeroVenda(tela.numero);
     setStatus(v.status);
+    setLancadaEm(v.finalizadoEm || v.criadoEm || null);
     setItensPorCategoria(tela.itensPorCategoria);
     setPagamentos(tela.pagamentos);
     setValorTotalVenda(tela.valorTotal);
@@ -720,6 +727,7 @@ export default function Venda() {
     setIncompativeis([]);
     setNumeroVenda('');
     setStatus('ABERTA');
+    setLancadaEm(null);
     setCliente(null);
     setBuscaCliente('');
     setPagamentos([]);
@@ -1202,8 +1210,13 @@ export default function Venda() {
 
       {vendaId && (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          {(status === 'ABERTA' || status === 'CONCLUIDA') && (
+          {(status === 'ABERTA' || (status === 'CONCLUIDA' && lancadaHoje(lancadaEm))) && (
             <button type="button" className="btn ghost" disabled={carregando || cancelando} onClick={handleCancelarVenda}>Cancelar venda</button>
+          )}
+          {status === 'CONCLUIDA' && !lancadaHoje(lancadaEm) && (
+            <span style={{ fontSize: 12.5, color: 'var(--text-faint)', alignSelf: 'center' }}>
+              Venda de dia anterior: só pode ser cancelada no dia do lançamento.
+            </span>
           )}
         </div>
       )}
@@ -1783,7 +1796,7 @@ export default function Venda() {
                       <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Número da linha:</label>
                       <input
                         type="text"
-                        placeholder="Ex: 89 98114-3161"
+                        placeholder=""
                         value={formProdutoVivo.numeroLinha}
                         onChange={(e) => setFormProdutoVivo((p) => ({ ...p, numeroLinha: e.target.value }))}
                         style={{ ...inputStyleGlobal, width: 240 }}

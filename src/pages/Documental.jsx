@@ -167,17 +167,24 @@ export default function Documental() {
     });
   };
 
+  // Improcedente -> Em avaliação: quem reabre descreve a correção na observação (o backend também confere)
+  const reabrindoImprocedente = formData?.statusBkoSalvo === 'Improcedente' && formData?.statusBko === 'Em_avaliacao_pelo_BKO';
+  const observacaoAtual = (formData?.observacoes || '').trim();
+  const correcaoInformada = !!observacaoAtual && observacaoAtual !== (formData?.observacoesSalvas || '').trim();
+
   const handleSalvar = async (e) => {
     e.preventDefault();
     setErroDetalhe('');
     setMensagemSalvo('');
+    if (reabrindoImprocedente && !correcaoInformada) {
+      setErroDetalhe('Para voltar a venda de Improcedente para Em avaliação, descreva a correção feita na observação.');
+      return;
+    }
     setSalvando(true);
     try {
       const salvo = await documental.salvar(formData.vendaId, documental.paraProtocolo(formData));
       setFormData(documental.paraFormulario(salvo));
-      setMensagemSalvo(salvo.statusVenda === 'CANCELADA'
-        ? `Protocolo salvo. A venda #${salvo.numeroVenda} foi avaliada como Improcedente e cancelada; os itens voltaram ao estoque.`
-        : `Protocolo da venda #${salvo.numeroVenda} salvo com sucesso.`);
+      setMensagemSalvo(`Protocolo da venda #${salvo.numeroVenda} salvo com sucesso.`);
     } catch (err) {
       setErroDetalhe(err.mensagem || err.message || 'Falha ao salvar o protocolo.');
     } finally {
@@ -613,6 +620,7 @@ export default function Documental() {
   // 4. TELA: ANÁLISE E EDIÇÃO DO PROTOCOLO
   // ==========================================================================
   const somenteLeitura = formData.statusVenda === 'CANCELADA';
+  const procedenteFinal = formData.statusBkoSalvo === 'Procedente';
   return (
     <div style={{ width: '100%', paddingBottom: 40, display: 'flex', flexDirection: 'column', gap: 14, boxSizing: 'border-box', color: 'var(--text)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
@@ -817,21 +825,27 @@ export default function Documental() {
               <span style={{ fontSize: 13.5, color: 'var(--text)', fontWeight: 600 }}>Status BKO:</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
                 {documental.STATUS_BKO.map(({ valor, rotulo }) => (
-                  <label key={valor} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', margin: 0 }}>
+                  <label key={valor} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: procedenteFinal ? 'default' : 'pointer', margin: 0 }}>
                     <input
                       type="radio"
                       name="statusBko"
                       value={valor}
                       checked={formData.statusBko === valor}
+                      disabled={procedenteFinal && valor !== 'Procedente'}
                       onChange={(e) => setFormData((prev) => ({ ...prev, statusBko: e.target.value }))}
                     />
                     <span style={{ fontSize: 13.5, fontWeight: formData.statusBko === valor ? 700 : 400 }}>{rotulo}</span>
                   </label>
                 ))}
               </div>
-              {formData.statusBko === 'Improcedente' && !somenteLeitura && (
-                <small style={{ color: 'var(--bad, #ef4444)', fontWeight: 600 }}>
-                  Improcedente cancela a venda ao salvar e devolve os itens ao estoque.
+              {!somenteLeitura && procedenteFinal && (
+                <small style={{ color: 'var(--text-faint)' }}>
+                  Venda avaliada como Procedente: o status BKO não muda mais.
+                </small>
+              )}
+              {!somenteLeitura && reabrindoImprocedente && (
+                <small style={{ color: correcaoInformada ? 'var(--text-faint)' : 'var(--warn, #f59e0b)', fontWeight: 600 }}>
+                  Para voltar de Improcedente para Em avaliação, descreva a correção feita na observação.
                 </small>
               )}
             </div>
