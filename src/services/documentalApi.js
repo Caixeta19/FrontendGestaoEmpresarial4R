@@ -120,6 +120,12 @@ export function paraFormulario(r) {
     situacaoServico: r.situacaoServico === 'CANCELADO' ? 'Cancelado' : 'Confirmado',
     gerarComissao: r.gerarComissao === false ? 'Não' : 'Sim',
     motivosCancelamento: r.motivosCancelamento || [],
+    ativacaoPrimeiraChamada: r.ativacaoPrimeiraChamada == null ? '' : r.ativacaoPrimeiraChamada ? 'sim' : 'nao',
+    dataAtivacao: r.dataAtivacao || '',
+    dataBaixa: r.dataBaixa || '',
+    dataInstalacao: r.dataInstalacao || '',
+    numeroProtocoloGedPortabilidade: r.numeroProtocoloGedPortabilidade || '',
+    alteradoPor: r.alteradoPorNome || '',
   };
 }
 
@@ -138,6 +144,12 @@ export function paraProtocolo(f) {
     gerarComissao: f.gerarComissao === 'Sim',
     motivosCancelamento: f.situacaoServico === 'Cancelado' ? f.motivosCancelamento : [],
     statusBko: f.statusBko,
+    // Sem resposta marcada fica nulo (não informado), e não "Não"
+    ativacaoPrimeiraChamada: f.ativacaoPrimeiraChamada === '' ? null : f.ativacaoPrimeiraChamada === 'sim',
+    dataAtivacao: texto(f.dataAtivacao) ?? null,
+    dataBaixa: texto(f.dataBaixa) ?? null,
+    dataInstalacao: texto(f.dataInstalacao) ?? null,
+    numeroProtocoloGedPortabilidade: texto(f.numeroProtocoloGedPortabilidade) ?? null,
   };
 }
 
