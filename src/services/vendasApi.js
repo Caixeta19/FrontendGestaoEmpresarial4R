@@ -123,19 +123,29 @@ export async function buscarAparelhos(busca) {
     .filter((a) => a.imei);
 }
 
-/** Acessórios. O preço de venda vem de consultarPreco (grupo SEM_PLANO). */
-export async function buscarAcessorios(busca) {
-  const lista = await buscarDisponiveis(busca, 30);
-  return lista
-    .filter(temCodigoAcessorio)
-    .slice(0, 8)
-    .map((s) => ({
+/**
+ * Leitura exata de um serial/IMEI no estoque (GET /estoque-geral/disponiveis/{serial}), para o leitor de código de barras.
+ * Devolve null quando o serial não existe ou não tem unidade livre (404).
+ * tipo: 'ACESSORIO' (tem código de acessório) ou 'APARELHO'.
+ */
+export async function lerSerialEstoque(serial) {
+  const termo = String(serial ?? '').trim();
+  if (!termo) return null;
+  try {
+    const s = await request(`/estoque-geral/disponiveis/${encodeURIComponent(termo)}`);
+    if (!s) return null;
+    return {
+      tipo: temCodigoAcessorio(s) ? 'ACESSORIO' : 'APARELHO',
       produtoId: s.id,
-      nome: s.modeloComercial || 'Acessório',
+      nome: s.modeloComercial || (temCodigoAcessorio(s) ? 'Acessório' : 'Aparelho'),
       sku: s.codigoAcessorio,
-      precoReferencia: Number(s.valorVenda ?? 0),
-      requerSerial: false,
-    }));
+      serial: s.serial,
+      quantidadeDisponivel: numeroOuNull(s.quantidadeDisponivel),
+    };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------- tabela de preços da Telefônica
