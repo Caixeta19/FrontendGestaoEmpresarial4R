@@ -642,6 +642,13 @@ export default function Venda() {
     return () => { ativo = false; clearTimeout(t); };
   }, [buscaSerialProduto, aparelhoSelecionado]);
 
+  // Validação dos formulários de Serviço e Produto Vivo: mensagem na tela (sem alert), some ao mexer no formulário.
+  const [erroServico, setErroServico] = useState('');
+  const [erroSerialServico, setErroSerialServico] = useState('');
+  const [erroProduto, setErroProduto] = useState('');
+  useEffect(() => { setErroServico(''); setErroSerialServico(''); }, [servicoForm]);
+  useEffect(() => { setErroProduto(''); }, [formProdutoVivo, aparelhoSelecionado, modalProdutoAberto]);
+
   // Aba Acessório aberta: o campo do serial fica com foco para o leitor de código de barras.
   useEffect(() => {
     if (abaAtiva === 'ACESSORIO') serialAcessorioRef.current?.focus();
@@ -649,7 +656,7 @@ export default function Venda() {
 
   const handleConfirmarSerialServico = () => {
     if (!servicoForm.simcard4g.trim()) {
-      alert('Informe o número do Simcard/Serial antes de confirmar.');
+      setErroSerialServico('Informe o número do Simcard/Serial antes de confirmar.');
       return;
     }
     setServicoForm((prev) => ({ ...prev, serialConfirmado: true }));
@@ -808,15 +815,15 @@ export default function Venda() {
   const handleAdicionarServicoVivo = (e) => {
     e.preventDefault();
     if (!servicoForm.servico || !servicoForm.numeroLinha) {
-      alert('Por favor, selecione o Serviço e informe o Número da linha.');
+      setErroServico('Selecione o Serviço e informe o Número da linha.');
       return;
     }
     if (requerPlanoAntigo && !servicoForm.planoAntigo) {
-      alert('Para Migração ou Troca de Plano, selecione o Plano Antigo.');
+      setErroServico('Para Migração ou Troca de Plano, selecione o Plano Antigo.');
       return;
     }
     if (requerSimcard && !servicoForm.clientePossuiSimcard && !servicoForm.simcard4g) {
-      alert('Informe o Serial do Simcard ou selecione "Cliente já possui simcard".');
+      setErroServico('Informe o Serial do Simcard ou selecione "Cliente já possui simcard".');
       return;
     }
 
@@ -864,15 +871,15 @@ export default function Venda() {
 
   const handleSalvarProdutoVivo = () => {
     if (!aparelhoSelecionado) {
-      alert('Por favor, informe ou selecione o Serial/IMEI do aparelho.');
+      setErroProduto('Informe ou selecione o Serial/IMEI do aparelho.');
       return;
     }
     if (!formProdutoVivo.servico) {
-      alert('Selecione o serviço do aparelho.');
+      setErroProduto('Selecione o serviço do aparelho.');
       return;
     }
     if (!formProdutoVivo.planoAtivo) {
-      alert('Selecione o plano ativo ou contratado do cliente (ou "Sem plano / Pré-pago").');
+      setErroProduto('Selecione o plano ativo ou contratado do cliente (ou "Sem plano / Pré-pago").');
       return;
     }
     if (precoProduto.status !== 'ok') return; // sem preço na tabela vigente: botão já fica desabilitado
@@ -1871,6 +1878,10 @@ export default function Venda() {
                     </div>
                   </fieldset>
 
+                  {erroProduto && (
+                    <span role="alert" style={{ fontSize: 12.5, color: 'var(--bad)', alignSelf: 'flex-end' }}>{erroProduto}</span>
+                  )}
+
                   {/* Card de Ações */}
                   <div style={{
                     display: 'flex',
@@ -2167,6 +2178,9 @@ export default function Venda() {
                             </button>
                           </div>
                         </div>
+                        {erroSerialServico && (
+                          <span role="alert" style={{ fontSize: 12.5, color: 'var(--bad)', marginLeft: 176 }}>{erroSerialServico}</span>
+                        )}
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 176 }}>
                           <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Desconto:</span>
@@ -2221,6 +2235,9 @@ export default function Venda() {
                   </select>
                 </div>
 
+                {erroServico && (
+                  <span role="alert" style={{ fontSize: 12.5, color: 'var(--bad)' }}>{erroServico}</span>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: 8 }}>
                   <button 
                     type="submit" 
