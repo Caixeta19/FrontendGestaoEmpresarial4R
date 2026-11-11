@@ -100,17 +100,22 @@ export async function buscarClientes(busca) {
 const buscarDisponiveis = async (busca, limite = 20) =>
   comoLista(await request('/estoque-geral/disponiveis', { params: { busca, filial: '', limite } }));
 
-/** Acessório = tem código de acessório (null, vazio e "-" não contam). Todo o resto é aparelho. */
 const temCodigoAcessorio = (s) => {
   const c = String(s.codigoAcessorio ?? '').trim();
   return c !== '' && c !== '-' && c !== "''";
 };
 
+/**
+ * Vai na aba Acessório? A regra é do backend (campo "acessorio": código de acessório, ou categoria de acessório sem
+ * IMEI, como capa e cabo com serial SAP). Backend antigo sem o campo: cai no código de acessório.
+ */
+const ehAcessorio = (s) => (typeof s.acessorio === 'boolean' ? s.acessorio : temCodigoAcessorio(s));
+
 /** Aparelhos (serial/IMEI disponível). precoReferencia = valor REGULAR/PRÉ do estoque, só informativo. */
 export async function buscarAparelhos(busca) {
   const lista = await buscarDisponiveis(busca, 20);
   return lista
-    .filter((s) => !temCodigoAcessorio(s))
+    .filter((s) => !ehAcessorio(s))
     .map((s) => ({
       produtoId: s.id, // id da linha em tb_estoque_geral
       nome: s.modeloComercial,
@@ -126,7 +131,7 @@ export async function buscarAparelhos(busca) {
 /**
  * Leitura exata de um serial/IMEI no estoque (GET /estoque-geral/disponiveis/{serial}), para o leitor de código de barras.
  * Devolve null quando o serial não existe ou não tem unidade livre (404).
- * tipo: 'ACESSORIO' (tem código de acessório) ou 'APARELHO'.
+ * tipo: 'ACESSORIO' (regra do backend, ver ehAcessorio) ou 'APARELHO'.
  */
 export async function lerSerialEstoque(serial) {
   const termo = String(serial ?? '').trim();
@@ -134,11 +139,12 @@ export async function lerSerialEstoque(serial) {
   try {
     const s = await request(`/estoque-geral/disponiveis/${encodeURIComponent(termo)}`);
     if (!s) return null;
+    const acessorio = ehAcessorio(s);
     return {
-      tipo: temCodigoAcessorio(s) ? 'ACESSORIO' : 'APARELHO',
+      tipo: acessorio ? 'ACESSORIO' : 'APARELHO',
       produtoId: s.id,
-      nome: s.modeloComercial || (temCodigoAcessorio(s) ? 'Acessório' : 'Aparelho'),
-      sku: s.codigoAcessorio,
+      nome: s.modeloComercial || (acessorio ? 'Acessório' : 'Aparelho'),
+      sku: temCodigoAcessorio(s) ? s.codigoAcessorio : null,
       serial: s.serial,
       quantidadeDisponivel: numeroOuNull(s.quantidadeDisponivel),
     };
