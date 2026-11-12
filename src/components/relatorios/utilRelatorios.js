@@ -7,4 +7,4 @@ export const hoje = () => dataISO(new Date());
 export const ufDaFilial = (nome) => /^([A-Z]{2})\s*-/.exec(String(nome || '').trim())?.[1] || '';
 
 /** Sem acento e minúsculo, para o "Filtrar opções". */
-export const semAcento = (s) => String(s || "").normalize("NFD").replace(/[0300-036f]/g, "").toLowerCase();
+export const semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
