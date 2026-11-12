@@ -12,37 +12,11 @@ import {
   Check,
   Trash2
 } from 'lucide-react';
-import { PDVS, VENDEDORES } from '../data/demoData';
 import { listarFiliais } from '../services/vendasApi';
 import { loginDoToken } from '../services/api';
 import * as documental from '../services/documentalApi';
-
-function baixarExcelCSV(cabecalhos, linhas, nomeArquivo) {
-  const delimitador = ';';
-  const csvLinhas = [
-    cabecalhos.join(delimitador),
-    ...linhas.map((linha) =>
-      linha
-        .map((campo) => {
-          const valor = String(campo ?? '').replace(/"/g, '""');
-          return `"${valor}"`;
-        })
-        .join(delimitador)
-    ),
-  ];
-
-  const conteudoCSV = '\uFEFF' + csvLinhas.join('\r\n');
-  const blob = new Blob([conteudoCSV], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', `${nomeArquivo}_${new Date().toISOString().slice(0, 10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
+import TelaRelatorioAnalitico from '../components/relatorios/TelaRelatorioAnalitico';
+import { hoje, inicioDoMes, ufDaFilial } from '../components/relatorios/utilRelatorios';
 
 // 4 Relatórios principais
 const ITENS_MENU_RELATORIOS = [
@@ -79,14 +53,6 @@ const LISTA_SERVICOS_FILTRO = [
   'Troca de Simcard', 'Troca de titularidade', 'Vinculado a Linha Contratada (Serviço)'
 ];
 const LISTA_TIPOS_PLANO = documental.TIPOS_PLANO.map((t) => t.valor);
-
-/** Data local em yyyy-MM-dd (toISOString usaria UTC e trocaria o dia à noite). */
-const dataISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const inicioDoMes = () => { const d = new Date(); d.setDate(1); return dataISO(d); };
-const hoje = () => dataISO(new Date());
-
-/** UF da filial pelo prefixo do nome ("CE - FTZ CENTRO" -> "CE"). */
-const ufDaFilial = (nome) => /^([A-Z]{2})\s*-/.exec(String(nome || '').trim())?.[1] || '';
 
 /** Padrão de filtros do usuário: fica no navegador, por login. O período não é salvo (volta para o mês atual). */
 const chavePadrao = () => `syscor_relatorio_documental_${loginDoToken() || 'anonimo'}`;
@@ -483,129 +449,10 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
 }
 
 /* ==========================================================================
-   TELA GENÉRICA DE EXTRAÇÃO PARA PRODUTOS, SERVIÇOS E VENDAS
-   ========================================================================== */
-function TelaExtracaoGenerica({ tipo, onVoltar, vendas }) {
-  const [dataInicio, setDataInicio] = useState('2026-09-01');
-  const [dataFim, setDataFim] = useState('2026-09-02');
-  const [filtroPdv, setFiltroPdv] = useState('TODOS');
-  const [filtroVendedor, setFiltroVendedor] = useState('TODOS');
-
-  const titulo = tipo === 'PRODUTOS' ? 'Venda de Produtos' : tipo === 'SERVICOS' ? 'Venda de Serviços' : 'Vendas';
-
-  const handleExportarGenerico = () => {
-    const cabecalhos = ['Nº Venda', 'Data', 'Loja/PDV', 'Cliente', 'CPF', 'Vendedor', 'Total (R$)', 'Status'];
-    const linhas = vendas.map(v => [
-      v.id,
-      v.data,
-      v.pdvId || 'Loja Principal',
-      v.cliente,
-      v.clienteDoc || '—',
-      v.vendedorNome || '—',
-      (v.valorTotal || 0).toFixed(2).replace('.', ','),
-      v.status || 'FINALIZADA'
-    ]);
-    baixarExcelCSV(cabecalhos, linhas, `Extracao_${tipo}_${dataInicio}_a_${dataFim}`);
-  };
-
-  return (
-    <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-        <div>
-          <button
-            type="button"
-            className="btn sm ghost"
-            onClick={onVoltar}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', marginBottom: 4 }}
-          >
-            <ArrowLeft size={15} /> Voltar aos Relatórios
-          </button>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Extração: {titulo}</h2>
-        </div>
-
-        <button
-          type="button"
-          className="btn sm solid"
-          onClick={handleExportarGenerico}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-        >
-          <FileSpreadsheet size={15} /> Exportar Excel
-        </button>
-      </div>
-
-      <div role="note" style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warn, #f59e0b)', border: '1px solid var(--warn, #f59e0b)', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
-        Dados de demonstração: esta extração ainda lê as vendas guardadas no navegador, e não as do sistema.
-      </div>
-
-      <div className="panel" style={{ padding: 24, background: 'var(--panel)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-          <div className="field" style={{ margin: 0 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Data Inicial:</label>
-            <input 
-              type="date" 
-              value={dataInicio} 
-              onChange={(e) => setDataInicio(e.target.value)} 
-              style={{ minHeight: 38, height: 'auto' }}
-            />
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Data Final:</label>
-            <input 
-              type="date" 
-              value={dataFim} 
-              onChange={(e) => setDataFim(e.target.value)} 
-              style={{ minHeight: 38, height: 'auto' }}
-            />
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>PDV / Loja:</label>
-            <select 
-              value={filtroPdv} 
-              onChange={(e) => setFiltroPdv(e.target.value)}
-              style={{ minHeight: 38, height: 'auto' }}
-            >
-              <option value="TODOS">Todas as Lojas</option>
-              {(PDVS || []).map(p => (
-                <option key={p.id} value={p.id}>{p.nome}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>Vendedor:</label>
-            <select 
-              value={filtroVendedor} 
-              onChange={(e) => setFiltroVendedor(e.target.value)}
-              style={{ minHeight: 38, height: 'auto' }}
-            >
-              <option value="TODOS">Todos os Vendedores</option>
-              {(VENDEDORES || []).map(v => (
-                <option key={v.id} value={v.id}>{v.nome}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 24, padding: 16, background: 'var(--panel-2)', borderRadius: 8, textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-          Configure os parâmetros acima e clique no botão <b>"Exportar Excel"</b> para transferir diretamente o ficheiro compilado das vendas.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ==========================================================================
    TELA PRINCIPAL EXCLUSIVA DE RELATÓRIO DE VENDAS (SEM OUTRAS ABAS)
    ========================================================================== */
 export default function Relatorios() {
   const [relatorioAtivo, setRelatorioAtivo] = useState(null);
-
-  const vendasGravadas = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem('syscor_vendas') || '[]');
-    } catch {
-      return [];
-    }
-  }, []);
 
   // 1. Tela de Gestão Documental
   if (relatorioAtivo === 'DOCUMENTAL') {
@@ -616,15 +463,11 @@ export default function Relatorios() {
     );
   }
 
-  // 2. Outras telas de extração (Produtos, Serviços, Vendas)
+  // 2. Relatórios analíticos da API (Produtos, Serviços, Vendas)
   if (relatorioAtivo) {
     return (
       <section className="view">
-        <TelaExtracaoGenerica 
-          tipo={relatorioAtivo} 
-          onVoltar={() => setRelatorioAtivo(null)} 
-          vendas={vendasGravadas} 
-        />
+        <TelaRelatorioAnalitico tipo={relatorioAtivo} onVoltar={() => setRelatorioAtivo(null)} />
       </section>
     );
   }
