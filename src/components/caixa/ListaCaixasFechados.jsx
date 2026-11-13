@@ -111,7 +111,15 @@ export default function ListaCaixasFechados({ filiais, filtros, onVoltar, onBusc
                   const conferido = cx.conferencia === 'CONFERIDO';
                   return (
                     <tr key={cx.id} style={{ borderBottom: '1px solid var(--line)', color: 'var(--text)' }}>
-                      <td style={{ padding: '12px 14px', fontWeight: 600 }}>{cx.id}</td>
+                      <td style={{ padding: '12px 14px', fontWeight: 600 }}>
+                        {cx.id}
+                        {cx.fechadoComDivergencia && (
+                          <span title={`Fechado com divergência: ${cx.justificativaDivergencia || ''}`}
+                            style={{ marginLeft: 6, background: '#dc2626', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 5px' }}>
+                            Divergência
+                          </span>
+                        )}
+                      </td>
                       <td style={{ padding: '12px 14px' }}>{formatarData(cx.dataAbertura)}</td>
                       <td style={{ padding: '12px 14px' }}>{cx.filialNome}</td>
                       <td style={{ padding: '12px 14px' }}>{cx.caixaPdv}</td>

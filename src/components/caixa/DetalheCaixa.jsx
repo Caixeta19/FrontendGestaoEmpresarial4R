@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Check, RotateCcw } from 'lucide-react';
 import { conferirCaixa, detalharCaixa, movimentoDetalhadoCaixa } from '../../services/financeiroApi';
+import LancamentosCaixa from './LancamentosCaixa';
 import ModalReabrir from './ModalReabrir';
 import { useToast } from '../ToastContext';
 import {
@@ -8,6 +9,7 @@ import {
 } from './utilCaixa';
 
 const ROTULO_ACAO = { ABRIU: 'Abriu', FECHOU: 'Fechou', CONFEROU: 'Conferiu', REABRIU: 'Reabriu' };
+const ROTULO_MOVIMENTO = { SANGRIA: 'Sangria', SUPRIMENTO: 'Suprimento', ESTORNO: 'Estorno' };
 const ROTULO_STATUS_VENDA = { CONCLUIDA: 'Concluída', CANCELADA: 'Cancelada', ABERTA: 'Aberta' };
 const reais = (n) => formatarMoeda(n).replace(/^R\$\s?/, '');
 
@@ -106,6 +108,11 @@ export default function DetalheCaixa({ id, onVoltar }) {
               </span>
             </div>
 
+            {caixa.fechadoComDivergencia && (
+              <div role="alert" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid var(--bad, #ef4444)', color: 'var(--bad, #ef4444)', padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+                Fechado com divergência por {caixa.fechadoPor || '—'}: {caixa.justificativaDivergencia || 'sem justificativa registrada'}
+              </div>
+            )}
             {caixa.justificativaAbertura && <p style={{ margin: 0, fontSize: 13, color: 'var(--text-dim)' }}><b>Justificativa da abertura:</b> {caixa.justificativaAbertura}</p>}
             {caixa.observacao && <p style={{ margin: 0, fontSize: 13, color: 'var(--text-dim)' }}><b>Observação do fechamento:</b> {caixa.observacao}</p>}
             {caixa.justificativaReabertura && (
@@ -123,7 +130,7 @@ export default function DetalheCaixa({ id, onVoltar }) {
                     <th style={{ paddingBottom: 10, textAlign: 'right' }}>Movimento</th>
                     <th style={{ paddingBottom: 10, textAlign: 'right' }}>Entradas</th>
                     <th style={{ paddingBottom: 10, textAlign: 'right' }}>Saídas</th>
-                    <th style={{ paddingBottom: 10, textAlign: 'right' }}>Valor contabilizado</th>
+                    <th style={{ paddingBottom: 10, textAlign: 'right' }}>Valor informado</th>
                     <th style={{ paddingBottom: 10, textAlign: 'right' }}>Diferença</th>
                   </tr>
                 </thead>
@@ -137,7 +144,7 @@ export default function DetalheCaixa({ id, onVoltar }) {
                         <td style={{ padding: '10px 0', textAlign: 'right' }}>{reais(f.movimento)}</td>
                         <td style={{ padding: '10px 0', textAlign: 'right' }}>{reais(f.entradas)}</td>
                         <td style={{ padding: '10px 0', textAlign: 'right' }}>{reais(f.saidas)}</td>
-                        <td style={{ padding: '10px 0', textAlign: 'right' }}>{reais(f.valorConferido ?? f.contabilizadoEsperado)}</td>
+                        <td style={{ padding: '10px 0', textAlign: 'right' }}>{reais(f.valorConferido)}</td>
                         <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, color: dif ? 'var(--bad, #ef4444)' : 'inherit' }}>
                           {dif === null ? '—' : reais(dif)}
                         </td>
@@ -148,12 +155,28 @@ export default function DetalheCaixa({ id, onVoltar }) {
                     <td style={{ padding: '10px 0' }}>Total</td>
                     <td style={{ padding: '10px 0', textAlign: 'right' }}>{reais(caixa.totalAbertura)}</td>
                     <td colSpan={3} />
-                    <td style={{ padding: '10px 0', textAlign: 'right' }}>{caixa.totalContabilizado === null ? '—' : reais(caixa.totalContabilizado)}</td>
+                    <td title="O que fica no caixa: só o dinheiro contado" style={{ padding: '10px 0', textAlign: 'right' }}>
+                      {caixa.totalContabilizado === null ? '—' : reais(caixa.totalContabilizado)}
+                    </td>
                     <td style={{ padding: '10px 0', textAlign: 'right' }}>{caixa.totalDiferenca === null ? '—' : reais(caixa.totalDiferenca)}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
+
+            <LancamentosCaixa caixaId={id} somenteLeitura />
+
+            {caixa.tentativasFechamento?.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
+                <b style={{ fontSize: 13.5 }}>Tentativas de fechamento recusadas por diferença</b>
+                {caixa.tentativasFechamento.map((t, i) => (
+                  <div key={i} style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
+                    {formatarDataHora(t.em)} — <b>{t.usuario || '—'}</b>:{' '}
+                    {t.formas.map((l) => `${rotuloForma(l.forma)}: digitado ${formatarMoeda(l.digitado)}, esperado ${formatarMoeda(l.esperado)}, diferença ${formatarMoeda(l.diferenca)}`).join(' · ')}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 28px', borderTop: '1px solid var(--line)', paddingTop: 14 }}>
               <button type="button" disabled style={emBreve} title="Em breve">Movimentação de valores (em breve)</button>
@@ -169,9 +192,9 @@ export default function DetalheCaixa({ id, onVoltar }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5 }}>
                   <thead>
                     <tr style={{ background: 'var(--panel-2)', color: 'var(--text-faint)' }}>
-                      <th style={{ padding: '10px 12px' }}>Venda</th>
+                      <th style={{ padding: '10px 12px' }}>Movimento</th>
                       <th style={{ padding: '10px 12px' }}>Hora</th>
-                      <th style={{ padding: '10px 12px' }}>Vendedor</th>
+                      <th style={{ padding: '10px 12px' }}>Vendedor / quem lançou</th>
                       <th style={{ padding: '10px 12px' }}>Forma</th>
                       <th style={{ padding: '10px 12px', textAlign: 'right' }}>Valor</th>
                       <th style={{ padding: '10px 12px' }}>Status</th>
@@ -181,13 +204,17 @@ export default function DetalheCaixa({ id, onVoltar }) {
                     {movimento.length === 0 ? (
                       <tr><td colSpan={6} style={{ padding: '18px 12px', textAlign: 'center', color: 'var(--text-faint)' }}>Nenhum pagamento lançado neste caixa.</td></tr>
                     ) : movimento.map((m, i) => (
-                      <tr key={`${m.vendaId}-${i}`} style={{ borderTop: '1px solid var(--line)', opacity: m.statusVenda === 'CANCELADA' ? 0.6 : 1 }}>
-                        <td style={{ padding: '9px 12px', fontWeight: 600 }}>#{String(m.numeroVenda).padStart(6, '0')}</td>
+                      <tr key={i} style={{ borderTop: '1px solid var(--line)', opacity: m.statusVenda === 'CANCELADA' ? 0.6 : 1 }}>
+                        <td style={{ padding: '9px 12px', fontWeight: 600 }}>
+                          {m.tipo === 'PAGAMENTO' || !m.tipo
+                            ? `#${String(m.numeroVenda).padStart(6, '0')}`
+                            : `${ROTULO_MOVIMENTO[m.tipo] || m.tipo}${m.conta || m.descricao ? ` · ${m.conta || m.descricao}` : ''}`}
+                        </td>
                         <td style={{ padding: '9px 12px' }}>{formatarDataHora(m.hora)}</td>
                         <td style={{ padding: '9px 12px' }}>{m.vendedor}</td>
                         <td style={{ padding: '9px 12px' }}>{rotuloForma(m.forma)}</td>
                         <td style={{ padding: '9px 12px', textAlign: 'right' }}>{formatarMoeda(m.valor)}</td>
-                        <td style={{ padding: '9px 12px' }}>{ROTULO_STATUS_VENDA[m.statusVenda] || m.statusVenda}</td>
+                        <td style={{ padding: '9px 12px' }}>{m.statusVenda ? (ROTULO_STATUS_VENDA[m.statusVenda] || m.statusVenda) : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
