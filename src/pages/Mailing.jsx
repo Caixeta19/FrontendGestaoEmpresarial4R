@@ -371,7 +371,7 @@ export default function Mailing() {
               >
                 <ArrowLeft size={18} />
               </button>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--accent, #a855f7)' }}>
+              <h2 style={{ margin: 0 }}>
                 Lista de Campanhas
               </h2>
             </div>
@@ -512,7 +512,7 @@ export default function Mailing() {
               <ArrowLeft size={18} />
             </button>
             <div>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--accent, #a855f7)' }}>
+              <h2 style={{ margin: 0 }}>
                 Cadastro de Campanha
               </h2>
               <span style={{ fontSize: 13, color: 'var(--text-faint, #94a3b8)' }}>

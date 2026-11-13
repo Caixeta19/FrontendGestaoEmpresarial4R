@@ -55,7 +55,7 @@ export default function ListaCaixasFechados({ filiais, filtros, onVoltar, onBusc
               <span style={{ width: 4, height: 18, background: 'var(--good, #22c55e)', borderRadius: 1 }} />
               <span style={{ width: 4, height: 18, background: 'var(--good, #22c55e)', borderRadius: 1 }} />
             </div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: '#f472b6' }}>
+            <h1 style={{ margin: 0 }}>
               Caixas fechados{nomePdv ? ` — ${nomePdv}` : ''}{filtros.dataInicio ? ` a partir de ${formatarData(filtros.dataInicio)}` : ''}
             </h1>
           </div>

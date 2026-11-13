@@ -121,7 +121,7 @@ export default function Dashboard() {
 
       <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: 'var(--text, #fff)' }}>Painel Geral Executivo</h1>
+          <h1 style={{ margin: 0 }}>Painel Geral Executivo</h1>
           <div className="sub" style={{ marginTop: 4, color: 'var(--text-faint, #8c85a6)', fontSize: 13 }}>
             Visão consolidada da operação · {dataExtenso()}
             {atualizadoEm && ` · atualizado às ${atualizadoEm}`}
@@ -195,7 +195,7 @@ export default function Dashboard() {
         <div className="panel" style={{ ...cardStyle, padding: 22, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text, #fff)' }}>Evolução de Vendas</h2>
+              <h2 style={{ margin: 0 }}>Evolução de Vendas</h2>
               <span style={rotuloStyle}>Todas as Categorias</span>
             </div>
             <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20,
@@ -224,7 +224,7 @@ export default function Dashboard() {
         <div className="panel" style={{ ...cardStyle, padding: 22, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text, #fff)' }}>Atividades Recentes</h2>
+              <h2 style={{ margin: 0 }}>Atividades Recentes</h2>
               <span style={rotuloStyle}>Feed de transações e contratos</span>
             </div>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700,

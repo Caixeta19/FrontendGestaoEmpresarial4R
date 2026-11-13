@@ -73,7 +73,7 @@ export default function ListaCaixasAbertos({ filiais, onVoltar }) {
                 <span style={{ width: 4, height: 18, background: 'var(--good, #22c55e)', borderRadius: 1 }} />
                 <span style={{ width: 4, height: 18, background: 'var(--good, #22c55e)', borderRadius: 1 }} />
               </div>
-              <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: '#f472b6' }}>Lista de caixas abertos</h1>
+              <h1 style={{ margin: 0 }}>Lista de caixas abertos</h1>
             </div>
           </div>
 

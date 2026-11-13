@@ -183,7 +183,7 @@ export default function CaixaFinanceiro() {
   const modalAjuda = modalAjudaAberto && (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: 24, maxWidth: 520, width: '90%', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <h3 style={{ margin: 0, color: 'var(--text)' }}>Ajuda do Módulo Caixa</h3>
+        <h3 style={{ margin: 0 }}>Ajuda do Módulo Caixa</h3>
         <p style={{ fontSize: 13.5, color: 'var(--text-dim)', lineHeight: 1.5, margin: 0 }}>
           <b>Sem caixa aberto hoje a filial não lança venda.</b> O gerente abre o caixa de hoje informando o dinheiro da gaveta e, no fim do dia,
           informa o que existe de fato em cada forma de pagamento (dinheiro contado; nas demais, o total recebido, conferido contra o extrato ou a maquininha).
@@ -269,7 +269,7 @@ export default function CaixaFinanceiro() {
               >
                 <ArrowLeft size={20} />
               </button>
-              <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#f472b6' }}>
+              <h1 style={{ margin: 0 }}>
                 Cadastro de Sangria de Caixa
               </h1>
             </div>
@@ -432,7 +432,7 @@ export default function CaixaFinanceiro() {
               >
                 <ArrowLeft size={20} />
               </button>
-              <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#f472b6' }}>
+              <h1 style={{ margin: 0 }}>
                 Busca de Movimentações Saída caixa
               </h1>
             </div>
@@ -526,7 +526,7 @@ export default function CaixaFinanceiro() {
                 <span style={{ width: 4, height: 18, background: 'var(--good, #22c55e)', borderRadius: 1 }} />
                 <span style={{ width: 4, height: 18, background: 'var(--good, #22c55e)', borderRadius: 1 }} />
               </div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: '#f472b6' }}>
+              <h1 style={{ margin: 0 }}>
                 Lista de Sangria de Caixa a partir de 25/09/2026
               </h1>
             </div>
@@ -630,8 +630,8 @@ export default function CaixaFinanceiro() {
         <div style={topoCardEstilo}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 6, height: 6, background: '#c084fc', borderRadius: 2 }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#c084fc' }}>Caixas Abertos</h2>
+              <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: 2 }} />
+              <h2 style={{ margin: 0 }}>Caixas Abertos</h2>
             </div>
             <p style={{ margin: '4px 0 0 14px', color: 'var(--text-faint)', fontSize: 13 }}>Incluir, alterar e fechar os caixas abertos.</p>
           </div>
@@ -666,8 +666,8 @@ export default function CaixaFinanceiro() {
         <div style={topoCardEstilo}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 6, height: 6, background: '#c084fc', borderRadius: 2 }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#c084fc' }}>Caixas do PDV</h2>
+              <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: 2 }} />
+              <h2 style={{ margin: 0 }}>Caixas do PDV</h2>
             </div>
             <p style={{ margin: '4px 0 0 14px', color: 'var(--text-faint)', fontSize: 13 }}>Crie os caixas das lojas da sua revenda.</p>
           </div>
@@ -683,8 +683,8 @@ export default function CaixaFinanceiro() {
         <div style={topoCardEstilo}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 6, height: 6, background: '#c084fc', borderRadius: 2 }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#c084fc' }}>Caixas Fechados</h2>
+              <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: 2 }} />
+              <h2 style={{ margin: 0 }}>Caixas Fechados</h2>
             </div>
             <p style={{ margin: '4px 0 0 14px', color: 'var(--text-faint)', fontSize: 13 }}>Visualizar e reabrir os caixas fechados.</p>
           </div>
@@ -721,8 +721,8 @@ export default function CaixaFinanceiro() {
         <div style={topoCardEstilo}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 6, height: 6, background: '#c084fc', borderRadius: 2 }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#c084fc' }}>Sangria de Caixa</h2>
+              <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: 2 }} />
+              <h2 style={{ margin: 0 }}>Sangria de Caixa</h2>
             </div>
             <p style={{ margin: '4px 0 0 14px', color: 'var(--text-faint)', fontSize: 13 }}>
               Cadastro de movimentos de saída do caixa.
@@ -790,8 +790,8 @@ export default function CaixaFinanceiro() {
         <div style={topoCardEstilo}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 6, height: 6, background: '#c084fc', borderRadius: 2 }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#c084fc' }}>Suprimentos de Caixa</h2>
+              <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: 2 }} />
+              <h2 style={{ margin: 0 }}>Suprimentos de Caixa</h2>
             </div>
             <p style={{ margin: '4px 0 0 14px', color: 'var(--text-faint)', fontSize: 13 }}>Cadastro de movimentos de entrada no caixa.</p>
           </div>

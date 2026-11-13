@@ -81,7 +81,7 @@ export default function DetalheCaixa({ id, onVoltar }) {
             style={{ background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
             <ArrowLeft size={20} />
           </button>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: '#f472b6' }}>
+          <h1 style={{ margin: 0 }}>
             Caixa nº {id}{caixa ? ` — ${caixa.filialNome} · ${caixa.caixaPdv} · ${formatarData(caixa.dataAbertura)}` : ''}
           </h1>
         </div>

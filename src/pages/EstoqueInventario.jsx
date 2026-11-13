@@ -142,7 +142,7 @@ function TelaInicial({ onAbrir }) {
     <section className="view" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Inventário Estoque</h1>
+          <h1 style={{ margin: 0 }}>Inventário Estoque</h1>
           <div className="sub">IQ09 do SAP × estoque do sistema × contagem física por bipagem</div>
         </div>
         <div className="topbar-actions">
@@ -404,7 +404,7 @@ function TelaContagem({ execucaoId, onVoltar }) {
       <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Inventário #{resumo.execucaoId}</h1>
+            <h1 style={{ margin: 0 }}>Inventário #{resumo.execucaoId}</h1>
             <BadgeStatus status={resumo.status} />
           </div>
           <div className="sub">

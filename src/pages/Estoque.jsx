@@ -501,7 +501,7 @@ function TabelaPrecosTela() {
   return (
     <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
-        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--accent, #c026d3)' }}>Tabela de Preços</div>
+        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--title-section)' }}>Tabela de Preços</div>
         <div style={{ fontSize: 13, marginTop: 4 }}>
           {estadoVigente === 'carregando' && <span style={{ color: 'var(--text-faint)' }}>Consultando a tabela vigente...</span>}
           {estadoVigente === 'vazio' && <span style={{ color: 'var(--warn, #f59e0b)' }}>Nenhuma tabela de preços importada ainda.</span>}
@@ -661,7 +661,7 @@ export default function RelatoriosEstoque() {
                   style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent, #c026d3)', marginTop: 7, flexShrink: 0 }}
                 />
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--accent, #c026d3)' }}>{r.titulo}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--title-section)' }}>{r.titulo}</div>
                   <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{r.descricao}</div>
                 </div>
               </div>

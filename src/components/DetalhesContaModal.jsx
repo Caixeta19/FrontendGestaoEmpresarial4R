@@ -39,7 +39,7 @@ export default function DetalhesContaModal({ conta, onClose }) {
               <FileText size={20} color="#c084fc" />
             </div>
             <div>
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#c084fc' }}>
+              <h3 style={{ margin: 0 }}>
                 Detalhes da Transação
               </h3>
               <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>

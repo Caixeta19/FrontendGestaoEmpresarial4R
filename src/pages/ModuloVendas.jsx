@@ -46,7 +46,7 @@ export default function ModuloVendas() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 4, height: 18, background: 'var(--accent, #c026d3)', borderRadius: 2 }} />
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
+              <h2 style={{ margin: 0 }}>
                 Cliente / Lead
               </h2>
             </div>
@@ -145,7 +145,7 @@ export default function ModuloVendas() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 4, height: 18, background: 'var(--accent, #c026d3)', borderRadius: 2 }} />
-              <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
+              <h2 style={{ margin: 0 }}>
                 Venda
               </h2>
             </div>
