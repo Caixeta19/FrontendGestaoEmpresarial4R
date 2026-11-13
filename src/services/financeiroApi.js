@@ -104,6 +104,13 @@ export const listarCaixasFechados = (filtros = {}) => request(`${CAIXA}/fechados
 export const detalharCaixa = (id) => request(`${CAIXA}/${id}`);
 export const movimentoDetalhadoCaixa = (id) => request(`${CAIXA}/${id}/movimento-detalhado`);
 
+/**
+ * Esperado e diferença do dinheiro para o valor contado informado, sem fechar: { valorContado, contabilizadoEsperado,
+ * diferenca }. O caixa aberto não mostra o esperado ao gerente; ele só o conhece depois de digitar o que contou.
+ */
+export const previaFechamentoCaixa = (id, valorContado) =>
+  request(`${CAIXA}/${id}/previa-fechamento`, { method: 'POST', body: { valorContado } });
+
 /** formas: [{ forma, valorConferido }]; só o dinheiro precisa ser contado. */
 export const fecharCaixa = (id, formas, observacao) =>
   request(`${CAIXA}/${id}/fechar`, { method: 'POST', body: { formas, observacao } });
