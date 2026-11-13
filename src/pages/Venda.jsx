@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Pencil, Plus, Trash2, CheckCircle, HelpCircle, X, Check } from 'lucide-react';
 import * as api from '../services/vendasApi';
 import { loginDoToken } from '../services/api';
 import { useToast } from '../components/ToastContext.jsx';
+import FaixaCaixaFechado from '../components/caixa/FaixaCaixaFechado';
+import { useSituacaoCaixa } from '../components/caixa/utilCaixa';
 
 /** Selo do cabeçalho: CONCLUIDA aparece como LANÇADA. */
 const rotuloStatus = (status) => (status === 'CONCLUIDA' ? 'LANÇADA' : status);
@@ -416,6 +418,11 @@ export default function Venda() {
 
   // Identificação e vendedor (a senha só é usada ao lançar ou cancelar a venda)
   const [pdvId, setPdvId] = useState('');
+  const navigate = useNavigate();
+  // Sem caixa aberto hoje a filial não vende: faixa vermelha e botões de item/lançar desabilitados. Se a consulta
+  // falhar (situação nula), a tela não trava e o backend recusa a venda com 409 CAIXA_NAO_ABERTO.
+  const { situacao: situacaoCaixa, recarregar: recarregarCaixa } = useSituacaoCaixa(pdvId ? Number(pdvId) : null);
+  const semCaixa = Boolean(pdvId) && situacaoCaixa !== null && situacaoCaixa.aberto === false;
   const [vendedorId, setVendedorId] = useState('');
   const [cliente, setCliente] = useState(null);
   const [buscaCliente, setBuscaCliente] = useState('');
@@ -1230,6 +1237,14 @@ export default function Venda() {
         </div>
       )}
 
+      {semCaixa && (!vendaId || status === 'ABERTA') && (
+        <FaixaCaixaFechado
+          podeAbrir={situacaoCaixa.podeAbrir}
+          onAbrir={() => navigate('/financeiro/caixas-abertos')}
+          onAtualizar={recarregarCaixa}
+        />
+      )}
+
       {erro && (
         <div role="alert" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
@@ -1912,7 +1927,7 @@ export default function Venda() {
                       type="button"
                       className="btn solid"
                       onClick={handleSalvarProdutoVivo}
-                      disabled={carregando || precoProduto.status !== 'ok'}
+                      disabled={carregando || semCaixa || precoProduto.status !== 'ok'}
                       title={precoProduto.status === 'semPreco' ? precoProduto.mensagem : undefined}
                       style={{
                         display: 'inline-flex',
@@ -2242,6 +2257,7 @@ export default function Venda() {
                   <button 
                     type="submit" 
                     className="btn solid" 
+                    disabled={semCaixa}
                     style={{ 
                       padding: '10px 20px', 
                       fontSize: 13.5,
@@ -2388,7 +2404,7 @@ export default function Venda() {
                       type="button"
                       className="btn solid"
                       onClick={() => adicionarAcessorioLido(acessorioLido)}
-                      disabled={carregando || precoAcessorio.status !== 'ok'}
+                      disabled={carregando || semCaixa || precoAcessorio.status !== 'ok'}
                       style={{
                         background: 'var(--accent, #c026d3)',
                         color: '#fff',
@@ -2800,7 +2816,7 @@ export default function Venda() {
           <button
             type="button"
             onClick={autenticando ? handleConfirmarAutenticacao : handleLancarVenda}
-            disabled={carregando || (status !== 'ABERTA' && !cancelando)}
+            disabled={carregando || (status !== 'ABERTA' && !cancelando) || (semCaixa && !cancelando)}
             className="btn solid"
             style={{ 
               padding: '12px 26px', 
