@@ -123,12 +123,7 @@ export default function BuscarVendas() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Search size={20} color="var(--accent, #c026d3)" />
-            <h1 style={{
-              fontSize: 20,
-              fontWeight: 800,
-              color: 'var(--text)',
-              margin: 0
-            }}>
+            <h1 style={{ margin: 0 }}>
               Busca de Vendas
             </h1>
           </div>
@@ -154,7 +149,7 @@ export default function BuscarVendas() {
         {/* SUBTÍTULO */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--good, #22c55e)' }}>
           <ChevronRight size={18} strokeWidth={3} />
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Filtros Principais</h3>
+          <h3 style={{ margin: 0 }}>Filtros Principais</h3>
         </div>
 
         {/* GRID DE FILTROS */}
@@ -353,7 +348,7 @@ export default function BuscarVendas() {
           flexDirection: 'column',
           gap: 16
         }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+          <h2 style={{ margin: 0 }}>
             Resultados Encontrados ({resultados.length})
           </h2>
 

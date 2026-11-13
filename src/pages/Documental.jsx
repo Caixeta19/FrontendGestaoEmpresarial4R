@@ -385,8 +385,8 @@ export default function Documental() {
           <div style={topoCardEstilo}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 6, height: 6, background: '#c084fc', borderRadius: 2 }} />
-                <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#c084fc' }}>
+                <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: 2 }} />
+                <h2 style={{ margin: 0 }}>
                   Gestão Documental
                 </h2>
               </div>
@@ -437,7 +437,7 @@ export default function Documental() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Search size={22} color="var(--accent, #c026d3)" />
-            <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
+            <h1 style={{ margin: 0 }}>
               Busca de Serviços - Gestão documental
             </h1>
           </div>
@@ -461,7 +461,7 @@ export default function Documental() {
         <form onSubmit={handleExecutarBusca} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: 28, width: '100%', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--good, #22c55e)', marginBottom: 20 }}>
             <ChevronRight size={18} strokeWidth={3} />
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Filtros Principais</h3>
+            <h3 style={{ margin: 0 }}>Filtros Principais</h3>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
@@ -556,7 +556,7 @@ export default function Documental() {
         {resultado && (
           <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
+              <h3 style={{ margin: 0 }}>
                 {ehFila ? 'Fila do BKO — vendas Não avaliado' : 'Vendas encontradas'}
               </h3>
               <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>
@@ -626,7 +626,7 @@ export default function Documental() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <FileEdit size={22} color="var(--accent, #c026d3)" />
-          <h1 style={{ fontSize: 21, fontWeight: 700, margin: 0, color: 'var(--accent, #c026d3)' }}>
+          <h1 style={{ margin: 0 }}>
             Análise e Edição de Protocolo - Venda #{formData.numeroVenda}
           </h1>
           <SeloStatusVenda status={formData.statusVenda} />

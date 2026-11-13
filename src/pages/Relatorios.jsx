@@ -246,7 +246,7 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <FileEdit size={22} color="var(--accent, #c026d3)" />
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: 'var(--accent, #c026d3)' }}>
+          <h1 style={{ margin: 0 }}>
             Relatório de Gestão Documental
           </h1>
         </div>
@@ -272,7 +272,7 @@ function TelaExtracaoGestaoDocumentalSyscor({ onVoltar }) {
       <div className="panel" style={{ padding: 24, background: 'var(--panel)', border: '1px solid var(--line)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--good)', marginBottom: 20 }}>
           <ChevronRight size={18} strokeWidth={3} />
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Filtros Principais</h3>
+          <h3 style={{ margin: 0 }}>Filtros Principais</h3>
         </div>
 
         {/* 1. SELEÇÃO DE FILIAL */}

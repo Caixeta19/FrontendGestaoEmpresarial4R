@@ -92,12 +92,7 @@ export default function VendasDia() {
             >
               <ArrowLeft size={20} />
             </button>
-            <h1 style={{
-              fontSize: 20,
-              fontWeight: 800,
-              color: 'var(--text)',
-              margin: 0
-            }}>
+            <h1 style={{ margin: 0 }}>
               Vendas do Dia ({dataHoje})
             </h1>
           </div>

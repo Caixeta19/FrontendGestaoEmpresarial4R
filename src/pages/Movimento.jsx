@@ -79,7 +79,7 @@ export default function Movimento() {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 14, position: 'relative' }}>
             <div style={{ position: 'absolute', left: 0, top: 4, width: 5, height: 14, borderRadius: 2, background: '#a855f7' }} />
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#c084fc', margin: 0, letterSpacing: 0.2 }}>
+            <h3 style={{ margin: 0 }}>
               Forma de Pagamento
             </h3>
             <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: 0 }}>
@@ -125,7 +125,7 @@ export default function Movimento() {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 14, position: 'relative' }}>
             <div style={{ position: 'absolute', left: 0, top: 4, width: 5, height: 14, borderRadius: 2, background: '#a855f7' }} />
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#c084fc', margin: 0, letterSpacing: 0.2 }}>
+            <h3 style={{ margin: 0 }}>
               Movimento Caixa
             </h3>
             <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: 0 }}>
@@ -194,7 +194,7 @@ export default function Movimento() {
             <BarChart3 size={24} color="#c084fc" />
           </div>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#c084fc', margin: 0 }}>
+            <h1 style={{ margin: 0 }}>
               Relatório de Formas de Pagamento
             </h1>
             <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: '2px 0 0 0' }}>
@@ -206,8 +206,7 @@ export default function Movimento() {
         <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', gap: 24, width: '100%', boxSizing: 'border-box' }}>
           
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#c084fc', letterSpacing: 0.5, marginBottom: 14, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 4, height: 12, background: '#a855f7', borderRadius: 2 }}></span>
+            <div className="section-label" style={{ marginBottom: 14 }}>
               Filtros Principais
             </div>
 
@@ -610,7 +609,7 @@ export default function Movimento() {
           <BarChart3 size={24} color="#c084fc" />
         </div>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: '#c084fc', margin: 0 }}>
+          <h1 style={{ margin: 0 }}>
             Relatório de Movimento de Caixa
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-faint)', margin: '2px 0 0 0' }}>
@@ -622,8 +621,7 @@ export default function Movimento() {
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', gap: 24, width: '100%', boxSizing: 'border-box' }}>
         
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#c084fc', letterSpacing: 0.5, marginBottom: 14, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 4, height: 12, background: '#a855f7', borderRadius: 2 }}></span>
+          <div className="section-label" style={{ marginBottom: 14 }}>
             Filtros Principais
           </div>
 

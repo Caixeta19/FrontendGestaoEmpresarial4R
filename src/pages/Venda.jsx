@@ -1275,7 +1275,7 @@ export default function Venda() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Pencil size={20} color="var(--accent, #c026d3)" />
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, textTransform: 'uppercase', color: 'var(--text)' }}>
+          <h1 style={{ margin: 0 }}>
             Lançar Venda <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text-faint)' }}></span>
           </h1>
         </div>
@@ -2475,7 +2475,7 @@ export default function Venda() {
           {abaAtiva === 'PAGAMENTO' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <section style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 840 }}>
-                <h3 style={{ margin: 0, fontSize: 15, color: 'var(--text)' }}>Como o cliente vai pagar?</h3>
+                <h3 style={{ margin: 0 }}>Como o cliente vai pagar?</h3>
                 {!vendaId ? (
                   <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>
                     Adicione um item ao carrinho para ver as condições de pagamento.
@@ -2518,7 +2518,7 @@ export default function Venda() {
               <form onSubmit={handleAdicionarPagamento} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 840 }}>
                 {vendaParcelada && (
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                    <h3 style={{ margin: 0, fontSize: 15, color: 'var(--text)' }}>Entrada</h3>
+                    <h3 style={{ margin: 0 }}>Entrada</h3>
                     <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>
                       Opcional. Os juros incidem só sobre o saldo financiado.
                     </span>

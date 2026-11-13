@@ -33,7 +33,7 @@ export default function ModalReabrir({ caixa, onFechar, onReaberto }) {
       <div role="dialog" aria-modal="true" aria-label="Reabrir caixa" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: 24, maxWidth: 480, width: '100%', display: 'flex', flexDirection: 'column', gap: 14, color: 'var(--text)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 18, color: '#f472b6' }}>Reabrir caixa nº {caixa.id}</h3>
+            <h3 style={{ margin: 0 }}>Reabrir caixa nº {caixa.id}</h3>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-faint)' }}>
               {caixa.filialNome} · {caixa.caixaPdv} · {formatarData(caixa.dataAbertura)}
             </p>

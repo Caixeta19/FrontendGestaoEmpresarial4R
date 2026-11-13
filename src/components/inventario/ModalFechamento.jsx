@@ -67,7 +67,7 @@ export default function ModalFechamento({ execucaoId, onFechado, onCancelar }) {
     >
       <div className="panel" style={{ width: '100%', maxWidth: 760, maxHeight: '90vh', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <h3 style={{ margin: 0, fontSize: 16 }}>Fechar inventário</h3>
+          <h3 style={{ margin: 0 }}>Fechar inventário</h3>
           <button type="button" className="btn sm ghost" onClick={onCancelar} disabled={enviando} aria-label="Fechar">
             <X size={16} />
           </button>

@@ -274,7 +274,7 @@ export default function DashboardRede() {
       {/* Topbar com Exportação Excel */}
       <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h1 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <BarChart3 size={24} color="var(--accent)" />
             Dashboard da Rede
           </h1>
@@ -406,7 +406,7 @@ export default function DashboardRede() {
       <div className="panel" style={{ padding: 20 }}>
         <div className="panel-head" style={{ marginBottom: 16 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16 }}>Vendas por Categoria</h3>
+            <h3 style={{ margin: 0 }}>Vendas por Categoria</h3>
             <span className="sub" style={{ fontSize: 12, color: 'var(--text-faint)' }}>
               Proporção dinâmica com base nos filtros ativos da rede
             </span>
@@ -451,7 +451,7 @@ export default function DashboardRede() {
       <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
         <div className="panel-head" style={{ padding: '16px 20px', margin: 0, borderBottom: '1px solid var(--line-soft)' }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16 }}>Vendas Filtradas</h3>
+            <h3 style={{ margin: 0 }}>Vendas Filtradas</h3>
             <span className="sub" style={{ fontSize: 12, color: 'var(--text-faint)' }}>
               {vendasFiltradas.length} vendas encontradas
             </span>

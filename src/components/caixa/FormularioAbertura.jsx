@@ -73,7 +73,7 @@ export default function FormularioAbertura({ filial, caixaPdv, onFechar, onAbert
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 18, color: '#f472b6' }}>Abrir caixa</h3>
+            <h3 style={{ margin: 0 }}>Abrir caixa</h3>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-faint)' }}>
               {filial.nome} · {caixaPdv} · hoje
             </p>

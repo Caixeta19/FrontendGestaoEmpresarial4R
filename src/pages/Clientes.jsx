@@ -248,8 +248,8 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
           <div style={topoCardEstilo}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 6, height: 6, background: '#c084fc', borderRadius: 2 }} />
-                <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#c084fc' }}>
+                <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: 2 }} />
+                <h2 style={{ margin: 0 }}>
                   Clientes / Leads
                 </h2>
               </div>
@@ -337,7 +337,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
         {modalAjudaAberto && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
             <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: 24, maxWidth: 460, width: '90%', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <h3 style={{ margin: 0, color: 'var(--text)' }}>Ajuda — Módulo de Clientes</h3>
+              <h3 style={{ margin: 0 }}>Ajuda — Módulo de Clientes</h3>
               <p style={{ fontSize: 13.5, color: 'var(--text-dim)', lineHeight: 1.5, margin: 0 }}>
                 Cadastre e consulte os dados completos de clientes e leads (Pessoa Física ou Jurídica). Ao localizar um cliente na listagem, você pode acionar diretamente o lançamento de venda associado ou editar os dados cadastrais.
               </p>
@@ -381,7 +381,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
               >
                 <ArrowLeft size={20} />
               </button>
-              <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: '#f472b6' }}>
+              <h1 style={{ margin: 0 }}>
                 Busca de Clientes / Leads
               </h1>
             </div>
@@ -495,7 +495,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
                 <span style={{ width: 4, height: 18, background: 'var(--good, #22c55e)', borderRadius: 1 }} />
                 <span style={{ width: 4, height: 18, background: 'var(--good, #22c55e)', borderRadius: 1 }} />
               </div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: '#f472b6' }}>
+              <h1 style={{ margin: 0 }}>
                 Lista de Clientes / Leads
               </h1>
             </div>
@@ -653,7 +653,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
         {modalAjudaAberto && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
             <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: 24, maxWidth: 460, width: '90%', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <h3 style={{ margin: 0, color: 'var(--text)' }}>Ajuda — Módulo de Clientes</h3>
+              <h3 style={{ margin: 0 }}>Ajuda — Módulo de Clientes</h3>
               <p style={{ fontSize: 13.5, color: 'var(--text-dim)', lineHeight: 1.5, margin: 0 }}>
                 Cadastre e consulte os dados completos de clientes e leads (Pessoa Física ou Jurídica). Ao localizar um cliente na listagem, você pode acionar diretamente o lançamento de venda associado ou editar os dados cadastrais.
               </p>
@@ -697,7 +697,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
             >
               <ArrowLeft size={20} />
             </button>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: '#f472b6' }}>
+            <h1 style={{ margin: 0 }}>
               {clienteEdicaoId ? `Editar Cliente #${clienteEdicaoId}` : 'Cadastro de Cliente / Lead'}
             </h1>
           </div>
@@ -748,7 +748,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
 
           {/* SEÇÃO: ENDEREÇO PRINCIPAL */}
           <div style={{ background: 'var(--panel-2)', padding: 18, borderRadius: 8, border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <h3 style={{ fontSize: 14, margin: 0, color: 'var(--text)', fontWeight: 700, borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
+            <h3 style={{ margin: 0, borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
               Endereço Principal
             </h3>
 
@@ -861,7 +861,7 @@ export default function Clientes({ onVoltar, etapaInicial = 'MENU' }) {
 
           {/* SEÇÃO: DADOS COMPLEMENTARES */}
           <div style={{ background: 'var(--panel-2)', padding: 18, borderRadius: 8, border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <h3 style={{ fontSize: 14, margin: 0, color: 'var(--text)', fontWeight: 700, borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
+            <h3 style={{ margin: 0, borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
               Dados Complementares
             </h3>
 

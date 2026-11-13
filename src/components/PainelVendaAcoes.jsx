@@ -25,7 +25,7 @@ export default function PainelVendaAcoes() {
             borderRadius: 3,
             display: 'inline-block'
           }} />
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+          <h2 style={{ margin: 0 }}>
             Venda
           </h2>
         </div>

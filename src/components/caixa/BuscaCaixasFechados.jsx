@@ -14,7 +14,7 @@ export default function BuscaCaixasFechados({ filiais, filtros, onChange, onPesq
             style={{ background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
             <ArrowLeft size={20} />
           </button>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: '#f472b6' }}>Busca de Caixas Fechados</h1>
+          <h1 style={{ margin: 0 }}>Busca de Caixas Fechados</h1>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 650 }}>
