@@ -18,6 +18,9 @@ export const ROTULO_FORMA = {
 export const FORMAS_DO_CAIXA = Object.keys(ROTULO_FORMA);
 export const rotuloForma = (forma) => ROTULO_FORMA[forma] || forma;
 
+/** Chave de idempotência: uma por formulário de lançamento, trocada só depois que o lançamento é feito. */
+export const novaChave = () => (globalThis.crypto?.randomUUID?.() ?? `k-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+
 export const mensagemErro = (e) => e?.mensagem || e?.message || 'Falha ao comunicar com o servidor.';
 export const codigoErro = (e) => e?.corpo?.codigo || null;
 
@@ -100,11 +103,15 @@ export function useSituacaoCaixa(filialId) {
 }
 
 /**
- * O que o usuário pode fazer no caixa. Se a consulta falhar, a tela libera os botões e o backend recusa (403) quem
- * não pode: errar para o lado de mostrar não dá poder a ninguém.
+ * O que o usuário pode fazer no caixa. Se a consulta falhar, a tela libera os botões de conferir, reabrir e estornar e o
+ * backend recusa (403) quem não pode: errar para o lado de mostrar não dá poder a ninguém. Fechar com divergência não é
+ * liberado: sem a resposta, o caixa só fecha com diferença zero.
  */
 export function usePermissoesCaixa() {
-  const [permissoes, setPermissoes] = useState({ conferirReabrir: true, todasAsFiliais: false, carregada: false });
+  const [permissoes, setPermissoes] = useState({
+    conferirReabrir: true, estornarLancamento: true, todasAsFiliais: false, veEsperadoDoAberto: false,
+    fecharComDivergencia: false, carregada: false,
+  });
   useEffect(() => {
     let vivo = true;
     permissoesCaixa()

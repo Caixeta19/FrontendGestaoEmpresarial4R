@@ -6,13 +6,14 @@ import Paginacao from './Paginacao';
 import PainelFechamento from './PainelFechamento';
 import SeletorPdv from './SeletorPdv';
 import { useToast } from '../ToastContext';
-import { formatarData, mensagemErro, rotuloDataCaixa } from './utilCaixa';
+import { formatarData, mensagemErro, rotuloDataCaixa, usePermissoesCaixa } from './utilCaixa';
 
 const TAMANHO = 20;
 
 /** Lista de caixas abertos (do servidor), com o bloco "Abrir caixa" e a conferência/fechamento de cada um. */
 export default function ListaCaixasAbertos({ filiais, onVoltar }) {
   const showToast = useToast();
+  const permissoes = usePermissoesCaixa();
   const [filialId, setFilialId] = useState('');
   const [busca, setBusca] = useState('');
   const [buscaAplicada, setBuscaAplicada] = useState('');
@@ -53,7 +54,7 @@ export default function ListaCaixasAbertos({ filiais, onVoltar }) {
   };
 
   const aoFechar = (fechado) => {
-    showToast(`Caixa nº ${fechado.id} (${fechado.filialNome}) fechado${fechado.totalDiferenca && Number(fechado.totalDiferenca) !== 0 ? ' com diferença' : ''}.`, false);
+    showToast(`Caixa nº ${fechado.id} (${fechado.filialNome}) fechado${fechado.fechadoComDivergencia ? ' com divergência: aguarda a conferência' : ''}.`, false);
     setExpandido(null);
     carregar();
   };
@@ -151,7 +152,13 @@ export default function ListaCaixasAbertos({ filiais, onVoltar }) {
                       {aberto && (
                         <tr style={{ background: 'var(--panel-2)', borderBottom: '2px solid var(--line)' }}>
                           <td colSpan={5} style={{ padding: '16px 24px 28px' }}>
-                            <PainelFechamento caixa={cx} onFechado={aoFechar} />
+                            <PainelFechamento
+                              caixa={cx}
+                              permissoes={permissoes}
+                              onFechado={aoFechar}
+                              onAtualizar={carregar}
+                              onCancelar={() => setExpandido(null)}
+                            />
                           </td>
                         </tr>
                       )}

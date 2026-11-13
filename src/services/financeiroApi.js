@@ -105,15 +105,25 @@ export const detalharCaixa = (id) => request(`${CAIXA}/${id}`);
 export const movimentoDetalhadoCaixa = (id) => request(`${CAIXA}/${id}/movimento-detalhado`);
 
 /**
- * Esperado e diferença do dinheiro para o valor contado informado, sem fechar: { valorContado, contabilizadoEsperado,
- * diferenca }. O caixa aberto não mostra o esperado ao gerente; ele só o conhece depois de digitar o que contou.
+ * Fecha o caixa só com diferença zero: `formas` = [{ forma, valorConferido }] de TODAS as formas exigidas. Recusas do backend:
+ * 422 CAIXA_COM_DIFERENCA (corpo.formas = as que divergem, corpo.tentativasRestantes) e 423 CAIXA_FECHAMENTO_BLOQUEADO.
+ * `justificativa` só vale para quem pode fechar com divergência (financeiro, gerente de área, auditoria e admin).
  */
-export const previaFechamentoCaixa = (id, valorContado) =>
-  request(`${CAIXA}/${id}/previa-fechamento`, { method: 'POST', body: { valorContado } });
-
-/** formas: [{ forma, valorConferido }]; só o dinheiro precisa ser contado. */
-export const fecharCaixa = (id, formas, observacao) =>
-  request(`${CAIXA}/${id}/fechar`, { method: 'POST', body: { formas, observacao } });
+export const fecharCaixa = (id, { formas, observacao, justificativa }) =>
+  request(`${CAIXA}/${id}/fechar`, { method: 'POST', body: { formas, observacao, justificativa } });
 export const conferirCaixa = (id) => request(`${CAIXA}/${id}/conferir`, { method: 'POST' });
 export const reabrirCaixa = (id, justificativa) =>
   request(`${CAIXA}/${id}/reabrir`, { method: 'POST', body: { justificativa } });
+
+// ---------------------------------------------------------------- sangria, suprimento e estorno (só dinheiro, caixa aberto)
+export const listarLancamentosCaixa = (id) => request(`${CAIXA}/${id}/lancamentos`);
+
+/**
+ * corpo: { tipo: 'SANGRIA' | 'SUPRIMENTO', valor, conta, observacao, chaveIdempotencia }. A chave é gerada uma vez por
+ * formulário: repetir a mesma (duplo clique, nova tentativa) devolve o lançamento já feito em vez de criar outro.
+ */
+export const lancarNoCaixa = (id, corpo) => request(`${CAIXA}/${id}/lancamentos`, { method: 'POST', body: corpo });
+
+/** Só financeiro e admin, com o caixa aberto: cria a contrapartida, nunca apaga a linha. */
+export const estornarLancamentoCaixa = (id, lancamentoId, { justificativa, chaveIdempotencia }) =>
+  request(`${CAIXA}/${id}/lancamentos/${lancamentoId}/estornar`, { method: 'POST', body: { justificativa, chaveIdempotencia } });

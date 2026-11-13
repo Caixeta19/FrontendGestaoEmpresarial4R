@@ -185,11 +185,13 @@ export default function CaixaFinanceiro() {
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12, padding: 24, maxWidth: 520, width: '90%', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <h3 style={{ margin: 0, color: 'var(--text)' }}>Ajuda do Módulo Caixa</h3>
         <p style={{ fontSize: 13.5, color: 'var(--text-dim)', lineHeight: 1.5, margin: 0 }}>
-          <b>Sem caixa aberto hoje a filial não lança venda.</b> O gerente abre o caixa de hoje informando o dinheiro da gaveta e,
-          no fim do dia, conta o dinheiro e fecha o caixa. A auditoria de caixa ou o financeiro marca o caixa como <b>Conferido</b>;
-          o ícone de relógio laranja indica conferência pendente. Quem fechou o caixa não o confere.
-          PIX, Vivo Pay, cartões e boleto liquidam na conciliação: só o dinheiro é contado.
-          <b> Reabrir</b> devolve o caixa para <b>Caixas Abertos</b> e exige justificativa. As sangrias ainda não estão integradas.
+          <b>Sem caixa aberto hoje a filial não lança venda.</b> O gerente abre o caixa de hoje informando o dinheiro da gaveta e, no fim do dia,
+          informa o que existe de fato em cada forma de pagamento (dinheiro contado; nas demais, o total recebido, conferido contra o extrato ou a maquininha).
+          <b> O caixa só fecha quando a diferença de todas as formas for zero</b>: o gerente da loja tem 5 tentativas por dia, e depois disso o financeiro
+          fecha o caixa com justificativa. Sangria e suprimento de dinheiro são lançados antes de contar a gaveta, na seção <b>Ao fechar o caixa</b>.
+          A auditoria de caixa ou o financeiro marca o caixa como <b>Conferido</b>; o ícone de relógio laranja indica conferência pendente, e quem fechou
+          o caixa não o confere. <b>Reabrir</b> devolve o caixa para <b>Caixas Abertos</b> e exige justificativa. As telas avulsas de sangria e suprimentos
+          do menu ainda não estão integradas.
         </p>
         <button
           type="button"

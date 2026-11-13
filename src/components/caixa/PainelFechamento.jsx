@@ -1,88 +1,87 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Lock } from 'lucide-react';
-import { fecharCaixa, previaFechamentoCaixa } from '../../services/financeiroApi';
+import { fecharCaixa } from '../../services/financeiroApi';
+import LancamentosCaixa from './LancamentosCaixa';
 import { inputEstiloFormulario } from './estilos';
 import {
   arredondar, codigoErro, formatarMoeda, lerValorBR, mensagemErro, rotuloForma, useSituacaoCaixa,
 } from './utilCaixa';
 
-const MINIMO_OBSERVACAO = 10;
+const MINIMO_JUSTIFICATIVA = 10;
 const reais = (n) => (n === null || n === undefined ? '—' : Number(n).toFixed(2).replace('.', ','));
 /** "+R$ 10,00" (sobra), "−R$ 5,00" (falta) ou "R$ 0,00". */
 const comSinal = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${formatarMoeda(Math.abs(n))}`;
-const corDaDiferenca = (n) => (n === 0 ? 'var(--good, #22c55e)' : n > 0 ? '#f97316' : 'var(--bad, #ef4444)');
+const corDaDiferenca = (n) => (n === 0 ? 'var(--good, #22c55e)' : 'var(--bad, #ef4444)');
 
 /**
- * Fechamento do caixa aberto. O dinheiro contado começa sempre vazio (fechamento cego): o gerente conta a gaveta e digita;
- * só então aparecem o esperado pelas vendas e a diferença (contado − esperado). Só o dinheiro é contado: PIX, Vivo Pay,
- * cartões e boleto liquidam na conciliação e fecham sem diferença. Fechar com diferença exige observação e confirmação.
+ * Conferência por forma de pagamento e fechamento do caixa aberto. Todas as formas exigidas começam vazias (nada
+ * pré-preenchido): o gerente informa o que existe de fato em cada uma (dinheiro na gaveta; nas demais, o total recebido,
+ * conferido contra o extrato ou a maquininha). O caixa só fecha com diferença zero em todas.
+ * <ul>
+ *   <li>Quem recebe o esperado (financeiro, gerente de área, auditoria e admin) vê a diferença de cada linha ao digitar e,
+ *       com diferença, fecha informando a justificativa.</li>
+ *   <li>O gerente da loja não recebe o esperado: só descobre ao clicar em Fechar, e o backend responde quais formas divergem
+ *       (sem valores). Cada recusa gasta uma das 5 tentativas do dia.</li>
+ * </ul>
  */
-export default function PainelFechamento({ caixa, onFechado }) {
-  const dinheiro = caixa.formas.find((f) => f.forma === 'DINHEIRO');
-  const esperadoDoCaixa = dinheiro?.contabilizadoEsperado; // null para o gerente: o caixa aberto não mostra o esperado
-  const [contado, setContado] = useState('');
+export default function PainelFechamento({ caixa, permissoes, onFechado, onAtualizar, onCancelar }) {
+  const exigidas = caixa.formas.filter((f) => f.exigidaNoFechamento);
+  const veEsperado = exigidas.some((f) => f.esperadoConferencia !== null && f.esperadoConferencia !== undefined);
+  const podeDivergir = Boolean(permissoes?.fecharComDivergencia);
+  const { situacao } = useSituacaoCaixa(caixa.filialId);
+  const podeFechar = situacao ? situacao.podeFechar : true; // sem resposta, o backend decide
+
+  const [valores, setValores] = useState({});
   const [observacao, setObservacao] = useState('');
-  const [previa, setPrevia] = useState(null); // { valorContado, esperado, diferenca } vinda do back, quando o esperado não veio
-  const [diferencaDoBack, setDiferencaDoBack] = useState(null); // diferença informada pelo 422 do fechamento
-  const [confirmando, setConfirmando] = useState(false);
+  const [justificativa, setJustificativa] = useState('');
+  const [resultado, setResultado] = useState({}); // { forma: 'DIVERGE' | 'OK' } depois de uma recusa do backend
+  const [restantes, setRestantes] = useState(caixa.tentativasRestantes ?? null);
+  const [bloqueadoNoBack, setBloqueadoNoBack] = useState(false);
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const { situacao } = useSituacaoCaixa(caixa.filialId);
-  const podeFechar = situacao ? situacao.podeAbrir : true; // sem resposta, o backend decide
 
-  const valor = lerValorBR(contado);
-  const valorValido = contado.trim() !== '' && Number.isFinite(valor) && valor >= 0;
-  const valorArredondado = valorValido ? arredondar(valor) : null;
-  const esperadoVisivel = esperadoDoCaixa !== null && esperadoDoCaixa !== undefined;
+  const numero = (forma) => lerValorBR(valores[forma]);
+  const preenchida = (f) => (valores[f.forma] ?? '').trim() !== '' && Number.isFinite(numero(f.forma)) && numero(f.forma) >= 0;
+  const todasPreenchidas = exigidas.length > 0 && exigidas.every(preenchida);
+  const diferencaDe = (f) => (veEsperado && preenchida(f) ? arredondar(numero(f.forma) - Number(f.esperadoConferencia)) : null);
+  const haDiferenca = exigidas.some((f) => {
+    const d = diferencaDe(f);
+    return d !== null && d !== 0;
+  });
+  const justificativaOk = justificativa.trim().length >= MINIMO_JUSTIFICATIVA;
+  const bloqueado = !podeDivergir && (bloqueadoNoBack || restantes === 0);
+  const precisaJustificar = veEsperado && haDiferenca && podeDivergir;
+  const semDiferencaNaTela = !(veEsperado && haDiferenca) || (podeDivergir && justificativaOk);
+  const habilitado = podeFechar && todasPreenchidas && !enviando && !bloqueado && semDiferencaNaTela;
 
-  // Esperado e diferença: calculados na tela quando o esperado veio; senão, vêm da prévia do back para o valor digitado.
-  const previaAtual = previa && previa.valorContado === valorArredondado ? previa : null;
-  const esperado = !valorValido ? null : esperadoVisivel ? Number(esperadoDoCaixa) : previaAtual?.esperado ?? null;
-  const diferenca = !valorValido
-    ? null
-    : esperadoVisivel
-      ? arredondar(valor - Number(esperadoDoCaixa))
-      : previaAtual?.diferenca ?? diferencaDoBack;
-  const haDiferenca = diferenca !== null && diferenca !== 0;
-
-  // Prévia da diferença para quem não recebe o esperado (espera uma pausa na digitação).
-  useEffect(() => {
-    if (esperadoVisivel || !valorValido) return undefined;
-    let vivo = true;
-    const t = setTimeout(() => {
-      previaFechamentoCaixa(caixa.id, valorArredondado)
-        .then((r) => {
-          if (vivo) {
-            setPrevia({ valorContado: arredondar(r.valorContado), esperado: Number(r.contabilizadoEsperado), diferenca: Number(r.diferenca) });
-          }
-        })
-        .catch(() => { /* sem prévia: o back informa a diferença ao fechar */ });
-    }, 400);
-    return () => { vivo = false; clearTimeout(t); };
-  }, [caixa.id, esperadoVisivel, valorValido, valorArredondado]);
-
-  const alterarContado = (texto) => {
+  const digitar = (forma, texto) => {
     if (!/^\d*([.,]\d{0,2})?$/.test(texto)) return; // só número, vírgula ou ponto, 2 casas, sem negativo
-    setContado(texto);
-    setConfirmando(false);
-    setDiferencaDoBack(null);
+    setValores((v) => ({ ...v, [forma]: texto }));
+    setResultado((r) => {
+      const { [forma]: _descartada, ...resto } = r;
+      return resto;
+    });
     setErro('');
   };
 
-  const enviar = async () => {
-    setEnviando(true);
+  const fechar = async () => {
     setErro('');
+    setEnviando(true);
     try {
-      onFechado(await fecharCaixa(
-        caixa.id,
-        [{ forma: 'DINHEIRO', valorConferido: valorArredondado }],
-        haDiferenca ? observacao.trim() : undefined,
-      ));
+      onFechado(await fecharCaixa(caixa.id, {
+        formas: exigidas.map((f) => ({ forma: f.forma, valorConferido: arredondar(numero(f.forma)) })),
+        observacao: observacao.trim() || undefined,
+        justificativa: precisaJustificar ? justificativa.trim() : undefined,
+      }));
     } catch (e) {
-      if (codigoErro(e) === 'CAIXA_DIFERENCA_SEM_OBSERVACAO') {
-        // O back conferiu a diferença e falta a observação: mostra o valor e pede a confirmação.
-        setDiferencaDoBack(Number(e.corpo?.diferenca));
-        setConfirmando(false);
+      const codigo = codigoErro(e);
+      if (codigo === 'CAIXA_COM_DIFERENCA') {
+        // O gerente da loja só fica sabendo quais formas divergem, sem o valor.
+        const divergem = new Set((e.corpo?.formas || []).map((x) => x.forma));
+        setResultado(Object.fromEntries(exigidas.map((f) => [f.forma, divergem.has(f.forma) ? 'DIVERGE' : 'OK'])));
+        if (typeof e.corpo?.tentativasRestantes === 'number') setRestantes(e.corpo.tentativasRestantes);
+      } else if (codigo === 'CAIXA_FECHAMENTO_BLOQUEADO') {
+        setBloqueadoNoBack(true);
       }
       setErro(mensagemErro(e));
     } finally {
@@ -90,28 +89,20 @@ export default function PainelFechamento({ caixa, onFechado }) {
     }
   };
 
-  const fechar = () => {
-    setErro('');
-    if (!valorValido) {
-      setErro('Informe o valor contado na gaveta.');
-      return;
-    }
-    if (!haDiferenca) {
-      enviar();
-      return;
-    }
-    if (observacao.trim().length < MINIMO_OBSERVACAO) {
-      setErro(`O caixa fecha com diferença de ${comSinal(diferenca)}: informe a observação (mín. ${MINIMO_OBSERVACAO} caracteres).`);
-      return;
-    }
-    setConfirmando(true);
+  const celulaDiferenca = (f) => {
+    const d = diferencaDe(f);
+    if (d !== null) return <b style={{ color: corDaDiferenca(d) }}>{comSinal(d)}</b>;
+    if (resultado[f.forma] === 'DIVERGE') return <b style={{ color: 'var(--bad, #ef4444)' }}>Diverge</b>;
+    if (resultado[f.forma] === 'OK') return <b style={{ color: 'var(--good, #22c55e)' }}>OK</b>;
+    return '—';
   };
-
-  // Sem a prévia (back antigo ou falha) o gerente fecha direto e o back avisa a diferença: aí o formulário passa a pedir a observação.
-  const pedirObservacao = haDiferenca && podeFechar;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <p style={{ margin: 0, fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+        Informe em <b>Valor contabilizado</b> o que existe de fato no caixa da loja. O caixa só fecha quando a diferença de todas as formas for zero.
+      </p>
+
       <div style={{ overflowX: 'auto', width: '100%' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13, color: 'var(--text)' }}>
           <thead>
@@ -126,67 +117,62 @@ export default function PainelFechamento({ caixa, onFechado }) {
             </tr>
           </thead>
           <tbody>
-            {caixa.formas.map((f) => {
-              const ehDinheiro = f.forma === 'DINHEIRO';
-              return (
-                <tr key={f.forma} style={{ borderTop: '1px solid var(--line)' }}>
-                  <td style={{ padding: '12px 0', fontWeight: 600 }}>
-                    {rotuloForma(f.forma)}
-                    {f.liquidaNaConciliacao && (
-                      <span style={{ display: 'block', fontSize: 11, fontWeight: 400, color: 'var(--text-faint)' }}>liquida na conciliação</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 0' }}>{reais(f.abertura)}</td>
-                  <td style={{ padding: '12px 0' }}>{reais(f.movimento)}</td>
-                  <td style={{ padding: '12px 0' }}>{reais(f.entradas)}</td>
-                  <td style={{ padding: '12px 0' }}>{reais(f.saidas)}</td>
-                  <td style={{ padding: '12px 0' }}>
-                    {ehDinheiro ? (
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={contado}
-                        onChange={(e) => alterarContado(e.target.value)}
-                        disabled={!podeFechar}
-                        placeholder="Informe o valor contado na gaveta"
-                        aria-label="Valor contado na gaveta"
-                        autoComplete="off"
-                        style={{ ...inputEstiloFormulario, width: 250, fontWeight: 700, padding: '4px 10px' }}
-                      />
-                    ) : (
-                      reais(f.contabilizadoEsperado)
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 0', fontWeight: 700, color: ehDinheiro && diferenca !== null ? corDaDiferenca(diferenca) : 'inherit' }}>
-                    {ehDinheiro ? (diferenca === null ? '—' : comSinal(diferenca)) : '0,00'}
-                  </td>
-                </tr>
-              );
-            })}
+            {exigidas.map((f) => (
+              <tr key={f.forma} style={{ borderTop: '1px solid var(--line)' }}>
+                <td style={{ padding: '12px 0', fontWeight: 600 }}>
+                  {rotuloForma(f.forma)}
+                  <span style={{ display: 'block', fontSize: 11, fontWeight: 400, color: 'var(--text-faint)' }}>
+                    {f.forma === 'DINHEIRO' ? 'dinheiro contado na gaveta' : 'total recebido: confira no extrato ou na maquininha'}
+                  </span>
+                </td>
+                <td style={{ padding: '12px 0' }}>{reais(f.abertura)}</td>
+                <td style={{ padding: '12px 0' }}>{reais(f.movimento)}</td>
+                <td style={{ padding: '12px 0' }}>{reais(f.entradas)}</td>
+                <td style={{ padding: '12px 0' }}>{reais(f.saidas)}</td>
+                <td style={{ padding: '12px 0' }}>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={valores[f.forma] ?? ''}
+                    onChange={(e) => digitar(f.forma, e.target.value)}
+                    disabled={!podeFechar || bloqueado}
+                    placeholder="0,00"
+                    aria-label={`Valor contabilizado de ${rotuloForma(f.forma)}`}
+                    autoComplete="off"
+                    style={{ ...inputEstiloFormulario, width: 130, fontWeight: 700, padding: '4px 10px' }}
+                  />
+                </td>
+                <td style={{ padding: '12px 0' }}>{celulaDiferenca(f)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
-      <div
-        aria-live="polite"
-        style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 28px', fontSize: 13.5, padding: '10px 14px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}
-      >
-        <span>Esperado pelas vendas: <b>{esperado === null ? '—' : formatarMoeda(esperado)}</b></span>
-        <span>Contado: <b>{valorValido ? formatarMoeda(valorArredondado) : '—'}</b></span>
-        <span>
-          Diferença:{' '}
-          <b style={{ color: diferenca === null ? 'inherit' : corDaDiferenca(diferenca) }}>
-            {diferenca === null ? '—' : comSinal(diferenca)}
-          </b>
-        </span>
-      </div>
+      {!podeDivergir && restantes !== null && restantes < 5 && (
+        <div role="status" style={{ fontSize: 12.5, fontWeight: 600, color: restantes === 0 ? 'var(--bad, #ef4444)' : '#f97316' }}>
+          {restantes === 0
+            ? 'Fechamento bloqueado: chame o financeiro.'
+            : `Restam ${restantes} tentativa${restantes === 1 ? '' : 's'} de fechamento hoje.`}
+        </div>
+      )}
+      {bloqueado && restantes !== 0 && (
+        <div role="status" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--bad, #ef4444)' }}>Fechamento bloqueado: chame o financeiro.</div>
+      )}
 
-      {pedirObservacao && (
+      <LancamentosCaixa
+        caixaId={caixa.id}
+        podeLancar={podeFechar}
+        podeEstornar={Boolean(permissoes?.estornarLancamento)}
+        onMudou={() => { setResultado({}); setErro(''); onAtualizar?.(); }}
+      />
+
+      {precisaJustificar && (
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600 }}>
-          Observação da diferença (mín. {MINIMO_OBSERVACAO} caracteres)
+          Justificativa da divergência (mín. {MINIMO_JUSTIFICATIVA} caracteres): o caixa fecha aguardando conferência
           <textarea
-            value={observacao}
-            onChange={(e) => { setObservacao(e.target.value); setConfirmando(false); }}
+            value={justificativa}
+            onChange={(e) => setJustificativa(e.target.value)}
             rows={3}
             maxLength={300}
             style={{ ...inputEstiloFormulario, resize: 'vertical', fontWeight: 400 }}
@@ -194,48 +180,42 @@ export default function PainelFechamento({ caixa, onFechado }) {
         </label>
       )}
 
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600 }}>
+        Observação do fechamento (opcional)
+        <textarea
+          value={observacao}
+          onChange={(e) => setObservacao(e.target.value)}
+          rows={2}
+          maxLength={300}
+          style={{ ...inputEstiloFormulario, resize: 'vertical', fontWeight: 400 }}
+        />
+      </label>
+
       {erro && (
         <div role="alert" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid var(--bad, #ef4444)', color: 'var(--bad, #ef4444)', padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
           {erro}
         </div>
       )}
 
-      {!podeFechar && (
+      {!podeFechar ? (
         <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>
-          Seu perfil só consulta esse caixa: quem fecha é o gerente da loja ou a auditoria de caixa.
+          Seu perfil só consulta esse caixa: quem fecha é o gerente da loja, o financeiro, o gerente de área ou a auditoria de caixa.
         </span>
-      )}
-
-      {podeFechar && confirmando && haDiferenca && (
-        <div role="alertdialog" aria-label="Confirmar fechamento com diferença" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
-          border: `1px solid ${corDaDiferenca(diferenca)}`, borderRadius: 8, padding: '12px 16px', background: 'var(--panel)',
-        }}>
-          <b style={{ fontSize: 14, color: corDaDiferenca(diferenca) }}>Fechar com diferença de {comSinal(diferenca)}?</b>
-          <span style={{ display: 'inline-flex', gap: 8 }}>
-            <button type="button" onClick={() => setConfirmando(false)} disabled={enviando}
-              style={{ background: 'transparent', border: '1px solid var(--line)', color: 'var(--text)', borderRadius: 6, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              Voltar e recontar
-            </button>
-            <button type="button" onClick={enviar} disabled={enviando}
-              style={{ background: '#7c3aed', border: 'none', color: '#fff', borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: enviando ? 0.7 : 1 }}>
-              {enviando ? 'Fechando…' : 'Sim, fechar caixa'}
-            </button>
-          </span>
-        </div>
-      )}
-
-      {podeFechar && !confirmando && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button type="button" onClick={onCancelar} disabled={enviando}
+            style={{ background: 'transparent', border: '1px solid var(--line)', color: 'var(--text)', borderRadius: 6, padding: '9px 20px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+            Cancelar
+          </button>
           <button
             type="button"
             onClick={fechar}
-            disabled={enviando || !valorValido}
-            title={valorValido ? undefined : 'Informe o valor contado na gaveta'}
+            disabled={!habilitado}
+            title={habilitado ? undefined : 'Preencha o valor de todas as formas; o caixa só fecha com diferença zero'}
             style={{
               background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, padding: '9px 24px', fontSize: 13.5,
-              fontWeight: 700, cursor: enviando || !valorValido ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8,
-              boxShadow: '0 2px 8px rgba(124, 58, 237, 0.4)', opacity: enviando || !valorValido ? 0.55 : 1,
+              fontWeight: 700, cursor: habilitado ? 'pointer' : 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: 8,
+              boxShadow: '0 2px 8px rgba(124, 58, 237, 0.4)', opacity: habilitado ? 1 : 0.55,
             }}
           >
             <Lock size={15} /> {enviando ? 'Fechando…' : 'Fechar caixa'}
