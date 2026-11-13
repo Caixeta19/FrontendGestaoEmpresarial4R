@@ -16,6 +16,8 @@ function lerJson(texto) {
 }
 
 const CHAVE_SESSAO_EXPIRADA = 'syscor_sessao_expirada';
+/** Disparado quando o backend responde um erro CAIXA_*: a situação do caixa na tela pode estar desatualizada. */
+export const EVENTO_CAIXA_MUDOU = 'syscor:caixa-mudou';
 let encerrandoSessao = false;
 
 /**
@@ -115,6 +117,8 @@ export async function request(path, { method = 'GET', body, params } = {}) {
     // 401 sem corpo = token ausente, inválido, expirado ou usuário inativado. Senha errada do vendedor e login
     // recusado também são 401, mas trazem a mensagem no corpo e são tratados por quem chamou.
     if (resp.status === 401 && !dados) encerrarSessaoExpirada();
+    // Erro do caixa (CAIXA_NAO_ABERTO, CAIXA_FECHADO...): quem mostra a situação do caixa consulta de novo.
+    if (String(dados?.codigo || '').startsWith('CAIXA_')) window.dispatchEvent(new Event(EVENTO_CAIXA_MUDOU));
 
     const detalhes = dados?.campos ? Object.values(dados.campos).join(' · ') : '';
     let mensagem = [dados?.mensagem, detalhes].filter(Boolean).join(' — ');

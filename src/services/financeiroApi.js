@@ -1,4 +1,4 @@
-import { API_BASE, encerrarSessaoExpirada } from './api';
+import { API_BASE, encerrarSessaoExpirada, request } from './api';
 
 // API_BASE já termina em /api (context-path do back). Aqui entram só os caminhos
 // depois dele: /financeiro/contas-pagar -> http://localhost:8080/api/financeiro/contas-pagar.
@@ -78,3 +78,35 @@ export function assinarConciliacao(onEvento) {
 
   return () => ctrl.abort();
 }
+
+// ---------------------------------------------------------------- caixa diário (V38)
+// Sem caixa aberto hoje a filial não vende. Erros do caixa trazem `corpo.codigo` (CAIXA_NAO_ABERTO, CAIXA_JA_ABERTO,
+// CAIXA_FECHADO, CAIXA_SEM_PERMISSAO, CAIXA_COM_CARRINHO_ABERTO) no ApiError.
+const CAIXA = '/financeiro/caixa';
+
+/** Caixa de hoje da filial: { aberto, caixaId, data, caixaPdv, caixas, podeAbrir, avisos }. */
+export const situacaoCaixa = (filialId) => request(`${CAIXA}/situacao`, { params: { filialId } });
+
+/** { conferirReabrir, todasAsFiliais } do usuário logado. */
+export const permissoesCaixa = () => request(`${CAIXA}/permissoes`);
+
+/** Dinheiro sugerido para a abertura (fechamento do último caixa desse caixa): { dinheiro, dataUltimoFechamento }. */
+export const sugestaoAberturaCaixa = (filialId, caixaPdv) =>
+  request(`${CAIXA}/sugestao-abertura`, { params: { filialId, caixaPdv } });
+
+/** corpo: { filialId, caixaPdv, formasIniciais: [{ forma, valorAbertura }], justificativaAbertura } */
+export const abrirCaixa = (corpo) => request(`${CAIXA}/abrir`, { method: 'POST', body: corpo });
+
+/** Filtros: filialId, dataInicio, dataFim (yyyy-MM-dd), conferencia, busca, ordenar, direcao, page, size. */
+export const listarCaixasAbertos = (filtros = {}) => request(`${CAIXA}/abertos`, { params: filtros });
+export const listarCaixasFechados = (filtros = {}) => request(`${CAIXA}/fechados`, { params: filtros });
+
+export const detalharCaixa = (id) => request(`${CAIXA}/${id}`);
+export const movimentoDetalhadoCaixa = (id) => request(`${CAIXA}/${id}/movimento-detalhado`);
+
+/** formas: [{ forma, valorConferido }]; só o dinheiro precisa ser contado. */
+export const fecharCaixa = (id, formas, observacao) =>
+  request(`${CAIXA}/${id}/fechar`, { method: 'POST', body: { formas, observacao } });
+export const conferirCaixa = (id) => request(`${CAIXA}/${id}/conferir`, { method: 'POST' });
+export const reabrirCaixa = (id, justificativa) =>
+  request(`${CAIXA}/${id}/reabrir`, { method: 'POST', body: { justificativa } });

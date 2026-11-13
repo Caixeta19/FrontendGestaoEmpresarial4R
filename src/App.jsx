@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { ToastProvider } from './components/ToastContext';
+import AvisoCaixaGerente from './components/caixa/AvisoCaixaGerente';
 
 // Componentes Globais
 import Sidebar from './components/Sidebar';
@@ -303,6 +304,7 @@ function LayoutPrivado({ session, setSession, temaEscuro, toggleTema }) {
           boxSizing: 'border-box',
           transition: 'background 0.2s ease'
         }}>
+          <AvisoCaixaGerente />
           <Outlet context={{ session }} />
         </main>
       </div>
