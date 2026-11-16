@@ -7,6 +7,7 @@ import { useToast } from './ToastContext.jsx';
 import ListaContasPagar from './contaspagar/ListaContasPagar.jsx';
 import ModalBaixaManual from './contaspagar/ModalBaixaManual.jsx';
 import ModalContaPagar from './contaspagar/ModalContaPagar.jsx';
+import ModalHistorico from './contaspagar/ModalHistorico.jsx';
 import ModalMotivo from './contaspagar/ModalMotivo.jsx';
 import PainelExtrato from './contaspagar/PainelExtrato.jsx';
 import {
@@ -198,7 +199,8 @@ export default function ContasPagarConciliacao() {
 
       {modal?.tipo === 'nova' && <ModalContaPagar onFechar={() => setModal(null)} onConcluido={concluido} />}
       {modal?.tipo === 'editar' && <ModalContaPagar conta={modal.conta} onFechar={() => setModal(null)} onConcluido={concluido} />}
-      {modal?.tipo === 'baixa' && <ModalBaixaManual conta={modal.conta} onFechar={() => setModal(null)} onConcluido={concluido} />}
+      {modal?.tipo === 'historico' && <ModalHistorico conta={modal.conta} onFechar={() => setModal(null)} />}
+      {modal?.tipo === 'baixa' &&<ModalBaixaManual conta={modal.conta} onFechar={() => setModal(null)} onConcluido={concluido} />}
       {modal?.tipo === 'cancelar' && (
         <ModalMotivo titulo="Cancelar conta" subtitulo={`${modal.conta.descricao} · ${modal.conta.fornecedor}`} botao="Cancelar conta" perigo
           onFechar={() => setModal(null)}

@@ -40,7 +40,9 @@ export const resumoContasPagar = () => request(`${PAGAR}/resumo`);
 /** { consultar, gerenciar, baixaManual, sincronizar } */
 export const permissoesContasPagar = () => request(`${PAGAR}/permissoes`);
 /** 409 CONTA_DUPLICADA / CONTA_PROVAVEL_DUPLICADA chegam em ApiError.corpo.codigo. */
-export const criarContaPagar = (corpo) => request(PAGAR, { method: 'POST', body: corpo });
+/** { conta, justificativaBaixa, motivoCancelamento, historico: [{ acao, usuario, em, texto }] } */
+export const detalheContaPagar = (id) => request(`${PAGAR}/${id}`);
+export const criarContaPagar =(corpo) => request(PAGAR, { method: 'POST', body: corpo });
 export const editarContaPagar = (id, corpo) => request(`${PAGAR}/${id}`, { method: 'PUT', body: corpo });
 export const cancelarContaPagar = (id, motivo) => request(`${PAGAR}/${id}/cancelar`, { method: 'POST', body: { motivo } });
 export const baixaManualContaPagar = (id, corpo) => request(`${PAGAR}/${id}/baixa-manual`, { method: 'POST', body: corpo });
