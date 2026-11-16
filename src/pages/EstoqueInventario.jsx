@@ -440,7 +440,7 @@ function TelaContagem({ execucaoId, onVoltar }) {
 
       {/* Bipagem */}
       {contando && (
-        <div className="panel" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="panel" style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <form onSubmit={onSubmitLeitura} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
               ref={campoRef}
@@ -457,7 +457,7 @@ function TelaContagem({ execucaoId, onVoltar }) {
                 if (!destino || !['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A'].includes(destino.tagName)) focarCampo();
               }}
               className="mono"
-              style={{ flex: '1 1 240px', minWidth: 0, height: 52, fontSize: 20, fontWeight: 600, letterSpacing: 0.5 }}
+              style={{ flex: '1 1 20px', minWidth: 0, height: 52, fontSize: 14, fontWeight: 600, letterSpacing: 0.5 }}
             />
             <button type="button" className="btn ghost" onClick={() => setCamera(true)} style={{ height: 52 }}>
               <Camera size={18} /> Câmera
