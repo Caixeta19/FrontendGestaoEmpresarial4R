@@ -6,7 +6,7 @@ import { STATUS_FILTRO, ORIGEM_BAIXA, badgeConta, dataBR, formatarMoeda, mensage
  * Filtros + tabela de contas. Os botões seguem `permissoes` (o backend confere de novo).
  * `acao(tipo, conta)` abre o modal correspondente no orquestrador.
  */
-export default function ListaContasPagar({ contas, filtros, onFiltros, permissoes, destaque, acao, showToast }) {
+export default function ListaContasPagar({ contas, filtros, onFiltros, permissoes, destaque, bancoPorConta = {}, acao, showToast }) {
   const [baixando, setBaixando] = useState(null);
 
   const abrirComprovante = async (c) => {
@@ -68,8 +68,8 @@ export default function ListaContasPagar({ contas, filtros, onFiltros, permissoe
                     <td className="mono">{dataBR(c.vencimento)}</td>
                     <td className="mono">
                       {formatarMoeda(c.valor)}
-                      {c.status === 'DIVERGENTE' && c.valorPago != null && (
-                        <div style={{ fontSize: 12, color: 'var(--bad)' }}>Banco: {formatarMoeda(c.valorPago)}</div>
+                      {c.status === 'DIVERGENTE' && bancoPorConta[c.id] != null && (
+                        <div style={{ fontSize: 12, color: 'var(--bad)' }}>Banco: {formatarMoeda(bancoPorConta[c.id])}</div>
                       )}
                     </td>
                     <td>

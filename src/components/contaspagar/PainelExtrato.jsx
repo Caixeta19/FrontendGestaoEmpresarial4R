@@ -8,6 +8,9 @@ import {
 
 const idSugestao = (s) => s.tituloId ?? s.id;
 
+const historicoDe = (l) => [l.subHistorico, l.infoComplementar].filter(Boolean).join(' · ') || '—';
+const REFORCO = { DOCUMENTO: 'CPF/CNPJ confere', NOME: 'nome no histórico', HISTORICO: 'histórico de pagamento' };
+
 /** Confirmação de vínculo; se o valor do banco difere da conta, exige justificativa. */
 function ModalVincular({ lancamento, titulo, onFechar, onConcluido }) {
   const [justificativa, setJustificativa] = useState('');
@@ -35,7 +38,7 @@ function ModalVincular({ lancamento, titulo, onFechar, onConcluido }) {
   return (
     <Modal titulo="Vincular lançamento" onFechar={onFechar} bloqueado={enviando}>
       <form onSubmit={enviar}>
-        <p style={{ marginBottom: 6 }}>Extrato: <b>{formatarMoeda(lancamento.valor)}</b> em {dataBR(lancamento.data)} — {lancamento.historico}</p>
+        <p style={{ marginBottom: 6 }}>Extrato: <b>{formatarMoeda(lancamento.valor)}</b> em {dataBR(lancamento.dataLancamento)} — {historicoDe(lancamento)}</p>
         <p>Conta: <b>{titulo.descricao}</b> · {titulo.fornecedor} · {formatarMoeda(titulo.valor)}</p>
         {difere && (
           <div className="field">
@@ -57,7 +60,7 @@ function ModalVincular({ lancamento, titulo, onFechar, onConcluido }) {
 function ModalEscolherConta({ lancamento, contasPendentes, onFechar, onEscolher }) {
   const [id, setId] = useState('');
   return (
-    <Modal titulo="Vincular a uma conta" subtitulo={`${formatarMoeda(lancamento.valor)} em ${dataBR(lancamento.data)} — ${lancamento.historico}`} onFechar={onFechar}>
+    <Modal titulo="Vincular a uma conta" subtitulo={`${formatarMoeda(lancamento.valor)} em ${dataBR(lancamento.dataLancamento)} — ${historicoDe(lancamento)}`} onFechar={onFechar}>
       <div className="field">
         <label htmlFor="ec-conta">Conta pendente</label>
         <select id="ec-conta" value={id} onChange={(e) => setId(e.target.value)}>
@@ -85,8 +88,9 @@ export default function PainelExtrato({ lancamentos, situacao, onSituacao, conta
     setSincronizando(true);
     try {
       const r = await sincronizarExtrato();
-      const resumo = r && typeof r === 'object' ? (r.mensagem || r.resumo) : null;
-      showToast(resumo || 'Extrato sincronizado.');
+      // O backend responde 200 também quando o banco falha: o resultado vem em `status`.
+      if (r?.status === 'ERRO') showToast(r.erro || 'Não foi possível consultar o extrato do banco.', true);
+      else showToast(`Extrato sincronizado: ${r?.lancamentosNovos ?? 0} novo(s), ${r?.conciliados ?? 0} conciliado(s).`);
       onMudou();
     } catch (e) {
       showToast(mensagemErro(e), true);
@@ -126,19 +130,23 @@ export default function PainelExtrato({ lancamentos, situacao, onSituacao, conta
                 const aberto = situacao === 'AMBIGUO' || situacao === 'SEM_CORRESPONDENCIA';
                 return (
                   <tr key={l.id}>
-                    <td className="mono">{dataBR(l.data)}</td>
+                    <td className="mono">{dataBR(l.dataLancamento)}</td>
                     <td className="mono">{formatarMoeda(l.valor)}</td>
-                    <td>{l.historico}</td>
+                    <td>{historicoDe(l)}</td>
                     <td>
                       {situacao === 'AMBIGUO' && (l.sugestoes || []).map((s) => (
                         <div key={idSugestao(s)} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-                          <span>{s.descricao} · {s.fornecedor} · <span className="mono">{formatarMoeda(s.valor)}</span> · {dataBR(s.vencimento)}</span>
+                          <span>
+                            {s.descricao} · {s.fornecedor} · <span className="mono">{formatarMoeda(s.valor)}</span> · {dataBR(s.vencimento)}
+                            {s.divergenciaValor && <span className="badge bad" style={{ marginLeft: 6 }}>valor diferente</span>}
+                            {(s.reforcos || []).map((r) => <span key={r} className="badge good" style={{ marginLeft: 6 }}>{REFORCO[r] || r}</span>)}
+                          </span>
                           {permissoes.baixaManual && (
                             <button type="button" className="btn sm" onClick={() => setModal({ tipo: 'vincular', lancamento: l, titulo: s })}>Vincular</button>
                           )}
                         </div>
                       ))}
-                      {situacao !== 'AMBIGUO' && (l.contaDescricao || l.motivo || '—')}
+                      {(situacao !== 'AMBIGUO' || !(l.sugestoes || []).length) && (l.motivo || '—')}
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       {aberto && (
@@ -168,7 +176,7 @@ export default function PainelExtrato({ lancamentos, situacao, onSituacao, conta
         <ModalVincular lancamento={modal.lancamento} titulo={modal.titulo} onFechar={() => setModal(null)} onConcluido={concluido} />
       )}
       {modal?.tipo === 'ignorar' && (
-        <ModalMotivo titulo="Ignorar lançamento" subtitulo={`${formatarMoeda(modal.lancamento.valor)} — ${modal.lancamento.historico}`}
+        <ModalMotivo titulo="Ignorar lançamento" subtitulo={`${formatarMoeda(modal.lancamento.valor)} — ${historicoDe(modal.lancamento)}`}
           botao="Ignorar" onFechar={() => setModal(null)}
           onConfirmar={async (motivo) => { await ignorarLancamento(modal.lancamento.id, motivo); concluido('Lançamento ignorado.'); }} />
       )}

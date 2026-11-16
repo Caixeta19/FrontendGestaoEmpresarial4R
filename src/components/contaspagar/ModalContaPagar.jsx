@@ -16,7 +16,7 @@ export default function ModalContaPagar({ conta, onFechar, onConcluido }) {
     vencimento: conta?.vencimento || '',
     valor: valorParaCampo(conta?.valor),
     formaPagamento: conta?.formaPagamento || 'BOLETO',
-    codigoBarras: '',
+    codigoBarras: conta?.codigoBarras || '', // o PUT grava o que vem: sem reenviar, editar apagaria o código
     filialId: conta?.filialId ?? '',
     categoria: conta?.categoria || '',
     observacao: conta?.observacao || '',
@@ -84,7 +84,7 @@ export default function ModalContaPagar({ conta, onFechar, onConcluido }) {
   return (
     <Modal titulo={editando ? 'Editar conta a pagar' : 'Nova conta a pagar'} onFechar={onFechar} bloqueado={enviando} largura={560}>
       <form onSubmit={(e) => { e.preventDefault(); salvar(false); }}>
-        <div className="field"><label htmlFor="cp-desc">Descrição *</label><input id="cp-desc" maxLength={150} value={f.descricao} onChange={set('descricao')} /></div>
+        <div className="field"><label htmlFor="cp-desc">Descrição *</label><input id="cp-desc" maxLength={200} value={f.descricao} onChange={set('descricao')} /></div>
         <div className="field"><label htmlFor="cp-forn">Fornecedor *</label><input id="cp-forn" maxLength={150} value={f.fornecedor} onChange={set('fornecedor')} /></div>
         <div className="field">
           <label htmlFor="cp-doc">CPF/CNPJ do fornecedor</label>
@@ -110,14 +110,12 @@ export default function ModalContaPagar({ conta, onFechar, onConcluido }) {
             </select>
           </div>
         </div>
-        {!editando && (
-          <div className="field">
-            <label htmlFor="cp-cod">Código de barras / linha digitável</label>
-            <input id="cp-cod" inputMode="numeric" placeholder="Pode colar com pontos e espaços" value={f.codigoBarras} onChange={set('codigoBarras')} />
-          </div>
-        )}
-        <div className="field"><label htmlFor="cp-cat">Categoria</label><input id="cp-cat" maxLength={80} value={f.categoria} onChange={set('categoria')} /></div>
-        <div className="field"><label htmlFor="cp-obs">Observação</label><textarea id="cp-obs" rows={2} maxLength={300} value={f.observacao} onChange={set('observacao')} /></div>
+        <div className="field">
+          <label htmlFor="cp-cod">Código de barras / linha digitável</label>
+          <input id="cp-cod" inputMode="numeric" placeholder="Pode colar com pontos e espaços" value={f.codigoBarras} onChange={set('codigoBarras')} />
+        </div>
+        <div className="field"><label htmlFor="cp-cat">Categoria</label><input id="cp-cat" maxLength={60} value={f.categoria} onChange={set('categoria')} /></div>
+        <div className="field"><label htmlFor="cp-obs">Observação</label><textarea id="cp-obs" rows={2} maxLength={500} value={f.observacao} onChange={set('observacao')} /></div>
 
         <AlertaErro>{erro}</AlertaErro>
         {duplicada && (
