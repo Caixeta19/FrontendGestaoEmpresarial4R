@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Modal, { AlertaErro } from './Modal.jsx';
 import ModalMotivo from './ModalMotivo.jsx';
 import { ignorarLancamento, sincronizarExtrato, vincularLancamento } from '../../services/financeiroApi';
@@ -81,20 +81,26 @@ function ModalEscolherConta({ lancamento, contasPendentes, onFechar, onEscolher 
 /** Seção "Extrato do Banco do Brasil" da aba Retorno bancário. */
 export default function PainelExtrato({ lancamentos, situacao, onSituacao, contasPendentes, permissoes, carregando, erro, onTentar, onMudou, showToast }) {
   const [sincronizando, setSincronizando] = useState(false);
+  const emAndamento = useRef(false); // trava síncrona: o estado só muda no próximo render, e dois cliques seguidos passariam
   const [modal, setModal] = useState(null); // { tipo: 'vincular' | 'escolher' | 'ignorar', lancamento, titulo? }
 
   const sincronizar = async () => {
-    if (sincronizando) return;
+    if (emAndamento.current) return;
+    emAndamento.current = true;
     setSincronizando(true);
     try {
       const r = await sincronizarExtrato();
       // O backend responde 200 também quando o banco falha: o resultado vem em `status`.
       if (r?.status === 'ERRO') showToast(r.erro || 'Não foi possível consultar o extrato do banco.', true);
-      else showToast(`Extrato sincronizado: ${r?.lancamentosNovos ?? 0} novo(s), ${r?.conciliados ?? 0} conciliado(s).`);
+      else {
+        showToast(`Extrato sincronizado: ${r?.lancamentosNovos ?? 0} importado(s), ${r?.conciliados ?? 0} conciliado(s), `
+          + `${r?.ambiguos ?? 0} ambíguo(s), ${r?.semCorrespondencia ?? 0} sem correspondência.`);
+      }
       onMudou();
     } catch (e) {
       showToast(mensagemErro(e), true);
     } finally {
+      emAndamento.current = false;
       setSincronizando(false);
     }
   };
