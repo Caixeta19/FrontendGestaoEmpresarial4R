@@ -30,6 +30,51 @@ export const reprocessarLog = (id) =>
     headers: cabecalhos(),
   });
 
+// ---------------------------------------------------------------- contas a pagar e extrato do BB
+const PAGAR = '/financeiro/contas-pagar';
+const EXTRATO = '/financeiro/conciliacao/extrato';
+
+/** Filtros opcionais: status, vencimentoDe, vencimentoAte, busca, filialId. */
+export const listarContasPagarFiltradas = (filtros = {}) => request(PAGAR, { params: filtros });
+export const resumoContasPagar = () => request(`${PAGAR}/resumo`);
+/** { consultar, gerenciar, baixaManual, sincronizar } */
+export const permissoesContasPagar = () => request(`${PAGAR}/permissoes`);
+/** 409 CONTA_DUPLICADA / CONTA_PROVAVEL_DUPLICADA chegam em ApiError.corpo.codigo. */
+export const criarContaPagar = (corpo) => request(PAGAR, { method: 'POST', body: corpo });
+export const editarContaPagar = (id, corpo) => request(`${PAGAR}/${id}`, { method: 'PUT', body: corpo });
+export const cancelarContaPagar = (id, motivo) => request(`${PAGAR}/${id}/cancelar`, { method: 'POST', body: { motivo } });
+export const baixaManualContaPagar = (id, corpo) => request(`${PAGAR}/${id}/baixa-manual`, { method: 'POST', body: corpo });
+export const reabrirContaPagar = (id, justificativa) =>
+  request(`${PAGAR}/${id}/reabrir`, { method: 'POST', body: { justificativa } });
+
+/**
+ * Comprovante em PDF. Um <a href> não envia o Bearer, então o arquivo é buscado com fetch e aberto por blob URL
+ * (nada fica guardado no navegador; a URL é revogada depois).
+ */
+export async function baixarComprovante(id) {
+  const aba = window.open('', '_blank'); // abre já, no clique, para o navegador não bloquear o pop-up
+  try {
+    const r = await fetch(`${API_BASE}${PAGAR}/${id}/comprovante`, { headers: cabecalhos() });
+    if (r.status === 401) encerrarSessaoExpirada();
+    if (!r.ok) throw new Error(r.status === 404 ? 'Comprovante não encontrado.' : `Falha ao baixar o comprovante (HTTP ${r.status}).`);
+    const url = URL.createObjectURL(await r.blob());
+    if (aba) aba.location.href = url;
+    else window.location.assign(url);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    aba?.close();
+    throw e;
+  }
+}
+
+export const sincronizarExtrato = () => request(`${EXTRATO}/sincronizar`, { method: 'POST' });
+/** situacao: AMBIGUO | SEM_CORRESPONDENCIA | CONCILIADO | IGNORADO (valores a confirmar no DTO do backend). */
+export const listarLancamentosExtrato = (situacao) => request(`${EXTRATO}/lancamentos`, { params: { situacao } });
+export const vincularLancamento = (id, { tituloId, justificativa }) =>
+  request(`${EXTRATO}/lancamentos/${id}/vincular`, { method: 'POST', body: { tituloId, justificativa } });
+export const ignorarLancamento = (id, motivo) =>
+  request(`${EXTRATO}/lancamentos/${id}/ignorar`, { method: 'POST', body: { motivo } });
+
 /**
  * Tempo real via SSE. O EventSource nativo não envia o header Authorization, então
  * a leitura é feita com fetch + stream, que aceita o token no header.
