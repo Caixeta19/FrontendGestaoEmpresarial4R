@@ -82,6 +82,7 @@ export default function ListaContasPagar({ contas, filtros, onFiltros, permissoe
                     <td>{c.banco || '—'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
+                        <button type="button" className="btn sm" onClick={() => acao('historico', c)}>Histórico</button>
                         {permissoes.gerenciar && pendente && <button type="button" className="btn sm" onClick={() => acao('editar', c)}>Editar</button>}
                         {permissoes.baixaManual && pendente && <button type="button" className="btn sm" onClick={() => acao('baixa', c)}>Baixa manual</button>}
                         {permissoes.gerenciar && pendente && <button type="button" className="btn sm danger" onClick={() => acao('cancelar', c)}>Cancelar</button>}
