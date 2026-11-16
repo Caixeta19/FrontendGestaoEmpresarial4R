@@ -10,7 +10,7 @@ import ModalContaPagar from './contaspagar/ModalContaPagar.jsx';
 import ModalMotivo from './contaspagar/ModalMotivo.jsx';
 import PainelExtrato from './contaspagar/PainelExtrato.jsx';
 import {
-  BADGE_LOG, BANCO, CANAL, dataHoraBR, formatarMoeda, horaBR, mensagemErro,
+  BADGE_LOG, BANCO, CANAL, codigoErro, dataHoraBR, formatarMoeda, horaBR, mensagemErro,
 } from './contaspagar/utilContasPagar.js';
 
 const SEM_PERMISSAO = { consultar: true, gerenciar: false, baixaManual: false, sincronizar: false };
@@ -40,6 +40,8 @@ export default function ContasPagarConciliacao() {
   const [carregandoExtrato, setCarregandoExtrato] = useState(false);
   const [erroExtrato, setErroExtrato] = useState('');
   const [contasPendentes, setContasPendentes] = useState([]);
+  const [bancoPorConta, setBancoPorConta] = useState({});
+  const [semPermissao, setSemPermissao] = useState(false);
   const [modal, setModal] = useState(null); // { tipo, conta }
   const [destaque, setDestaque] = useState({});
   const [aoVivo, setAoVivo] = useState(false);
@@ -62,7 +64,8 @@ export default function ContasPagarConciliacao() {
     setResumo(r);
     setPermissoes({ ...SEM_PERMISSAO, ...p });
     // Contas pendentes (sem filtro) para o "Vincular a uma conta…".
-    if (Object.keys(params).length === 0) setContasPendentes(listaDe(c).filter((x) => x.status === 'ABERTO'));
+    // O backend aceita vincular em conta ABERTO ou DIVERGENTE.
+    if (Object.keys(params).length === 0) setContasPendentes(listaDe(c).filter((x) => x.status === 'ABERTO' || x.status === 'DIVERGENTE'));
   }, []);
 
   const carregarExtrato = useCallback(async () => {
@@ -71,6 +74,8 @@ export default function ContasPagarConciliacao() {
     try {
       const [amb, sem] = await Promise.all([listarLancamentosExtrato('AMBIGUO'), listarLancamentosExtrato('SEM_CORRESPONDENCIA')]);
       setContagemExtrato(listaDe(amb).length + listaDe(sem).length);
+      // Lançamento ambíguo com tituloId é o valor que o banco pagou numa conta DIVERGENTE.
+      setBancoPorConta(Object.fromEntries(listaDe(amb).filter((x) => x.tituloId != null).map((x) => [x.tituloId, x.valor])));
       const atual = situacaoRef.current;
       if (atual === 'AMBIGUO') setLancamentos(listaDe(amb));
       else if (atual === 'SEM_CORRESPONDENCIA') setLancamentos(listaDe(sem));
@@ -85,9 +90,11 @@ export default function ContasPagarConciliacao() {
   const carregarTudo = useCallback(async () => {
     try {
       setErro('');
+      setSemPermissao(false);
       const [, l] = await Promise.all([carregarContas(), listarLogs()]);
       setLogs(l);
     } catch (e) {
+      setSemPermissao(codigoErro(e) === 'FINANCEIRO_SEM_PERMISSAO');
       setErro(mensagemErro(e));
     } finally {
       setCarregando(false);
@@ -123,8 +130,9 @@ export default function ContasPagarConciliacao() {
   const concluido = (msg) => { setModal(null); showToast(msg); carregarTudo(); };
   const acao = (tipo, conta) => setModal({ tipo, conta });
 
-  const canal = CANAL[resumo?.canalBancario?.situacao] || CANAL.AGUARDANDO;
-  const sincronizadoEm = resumo?.canalBancario?.ultimaSincronizacao;
+  // O backend manda o canal como texto (DESLIGADO|AGUARDANDO|CONECTADO|COM_ERRO) e a hora na raiz do resumo.
+  const canal = CANAL[resumo?.canalBancario] || CANAL.AGUARDANDO;
+  const sincronizadoEm = resumo?.ultimaSincronizacao;
   const errosLog = logs.filter((l) => l.status === 'ERRO').length;
 
   return (
@@ -136,7 +144,7 @@ export default function ContasPagarConciliacao() {
         <div className="kpi">
           <div className="lbl">Canal bancário{aoVivo ? ' · ao vivo' : ''}</div>
           <div className="val" style={{ fontSize: 15, color: canal.cor }}>{canal.texto}</div>
-          {resumo?.canalBancario?.situacao === 'CONECTADO' && sincronizadoEm && (
+          {sincronizadoEm && resumo?.canalBancario !== 'DESLIGADO' && (
             <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>última sincronização às {horaBR(sincronizadoEm)}</div>
           )}
         </div>
@@ -153,12 +161,12 @@ export default function ContasPagarConciliacao() {
         {erro ? (
           <div style={{ padding: 24, textAlign: 'center' }}>
             <p style={{ color: 'var(--bad)', marginBottom: 10 }}>{erro}</p>
-            <button type="button" className="btn" onClick={() => { setCarregando(true); carregarTudo(); }}>Tentar de novo</button>
+            {!semPermissao && <button type="button" className="btn" onClick={() => { setCarregando(true); carregarTudo(); }}>Tentar de novo</button>}
           </div>
         ) : carregando ? (
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-faint)' }}>Carregando…</div>
         ) : aba === 'contas' ? (
-          <ListaContasPagar contas={contas} filtros={filtros} onFiltros={setFiltros} permissoes={permissoes} destaque={destaque} acao={acao} showToast={showToast} />
+          <ListaContasPagar contas={contas} filtros={filtros} onFiltros={setFiltros} permissoes={permissoes} destaque={destaque} bancoPorConta={bancoPorConta} acao={acao} showToast={showToast} />
         ) : (
           <>
             <div className="table-wrap" style={{ overflowX: 'auto' }}>

@@ -43,7 +43,7 @@ export default function ModalBaixaManual({ conta, onFechar, onConcluido }) {
       <form onSubmit={enviar}>
         <div className="field"><label htmlFor="bm-data">Data do pagamento</label><input id="bm-data" type="date" value={dataPagamento} onChange={(e) => setData(e.target.value)} /></div>
         <div className="field"><label htmlFor="bm-valor">Valor pago (R$)</label><input id="bm-valor" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} /></div>
-        <div className="field"><label htmlFor="bm-banco">Banco</label><input id="bm-banco" maxLength={60} value={banco} onChange={(e) => setBanco(e.target.value)} /></div>
+        <div className="field"><label htmlFor="bm-banco">Banco</label><input id="bm-banco" maxLength={30} value={banco} onChange={(e) => setBanco(e.target.value)} /></div>
         <div className="field">
           <label htmlFor="bm-just">Justificativa (mín. {MINIMO_JUSTIFICATIVA} caracteres)</label>
           <textarea id="bm-just" rows={3} maxLength={300} value={justificativa} onChange={(e) => setJustificativa(e.target.value)} />
