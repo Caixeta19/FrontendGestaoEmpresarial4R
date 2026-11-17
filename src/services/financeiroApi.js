@@ -1,4 +1,5 @@
-import { API_BASE, encerrarSessaoExpirada, request } from './api';
+import { API_BASE, ApiError, encerrarSessaoExpirada, lerToken, request } from './api';
+import { baixarArquivo } from './documentalApi';
 
 // API_BASE já termina em /api (context-path do back). Aqui entram só os caminhos
 // depois dele: /financeiro/contas-pagar -> http://localhost:8080/api/financeiro/contas-pagar.
@@ -174,3 +175,51 @@ export const lancarNoCaixa = (id, corpo) => request(`${CAIXA}/${id}/lancamentos`
 /** Só financeiro e admin, com o caixa aberto: cria a contrapartida, nunca apaga a linha. */
 export const estornarLancamentoCaixa = (id, lancamentoId, { justificativa, chaveIdempotencia }) =>
   request(`${CAIXA}/${id}/lancamentos/${lancamentoId}/estornar`, { method: 'POST', body: { justificativa, chaveIdempotencia } });
+
+// ---------------------------------------------------------------- Movimento › Relatório de Formas de Pagamento
+const FORMAS = '/financeiro/movimento/formas-pagamento';
+
+/** Filtros -> query string: as listas viram CSV (o Spring aceita) e as vazias saem ("todas"). */
+function paramsFormasPagamento({ dataInicio, dataFim, agruparPor, filialIds, formas }) {
+  return {
+    dataInicio,
+    dataFim,
+    agruparPor,
+    filialIds: filialIds?.length ? filialIds.join(',') : undefined,
+    formas: formas?.length ? formas.join(',') : undefined,
+  };
+}
+
+/** { consultar }: só para esconder o item de menu; o backend confere de novo. */
+export const permissoesFormasPagamento = () => request(`${FORMAS}/permissoes`);
+/** { filiais: [{ id, codigo, nome }], formas: [{ valor, rotulo }] } já no escopo do usuário. */
+export const opcoesFormasPagamento = () => request(`${FORMAS}/opcoes`);
+/** { periodo, agruparPor, geradoEm, semDataFinalizacao, grupos, totalGeral, quantidadePagamentos, quantidadeVendas, totaisPorForma } */
+export const relatorioFormasPagamento = (filtros) => request(FORMAS, { params: paramsFormasPagamento(filtros) });
+
+/**
+ * Baixa o arquivo (xlsx | pdf | csv). Um <a href> não envia o Bearer: busca com fetch e baixa o blob. Erro do backend
+ * (ex.: período, permissão) vira ApiError com a mensagem dele. Devolve o nome do arquivo.
+ */
+export async function exportarFormasPagamento(filtros, formato) {
+  const url = new URL(`${API_BASE}${FORMAS}/exportar`);
+  Object.entries({ ...paramsFormasPagamento(filtros), formato }).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') url.searchParams.set(k, v);
+  });
+  const t = lerToken();
+  let resp;
+  try {
+    resp = await fetch(url.toString(), { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+  } catch {
+    throw new ApiError(0, 'Não foi possível conectar ao servidor. Verifique se o backend está no ar.');
+  }
+  if (!resp.ok) {
+    const corpo = await resp.json().catch(() => null);
+    if (resp.status === 401 && !corpo) encerrarSessaoExpirada();
+    throw new ApiError(resp.status, corpo?.mensagem || `Erro ${resp.status}`, corpo?.campos, corpo);
+  }
+  const nome = /filename="?([^";]+)"?/.exec(resp.headers.get('Content-Disposition') || '')?.[1]
+    || `formas-pagamento.${formato}`;
+  baixarArquivo(await resp.blob(), nome);
+  return nome;
+}
