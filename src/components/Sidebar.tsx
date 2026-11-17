@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTema } from '../context/ThemeContext';
+import { usePodeVerMovimento } from './movimento/utilMovimento.js';
 import { 
   LayoutDashboard, 
   ShoppingCart, 
@@ -103,6 +104,7 @@ export default function Sidebar({ setSession }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { tema, alternarTema } = useTema();
+  const podeVerMovimento = usePodeVerMovimento();   // esconde o item sem permissão; o backend barra de qualquer forma
 
   const grupoAtivoInicial = navGroups.find((g) =>
     g.items.some((item) => item.to !== '/' && location.pathname.startsWith(item.to))
@@ -147,7 +149,7 @@ export default function Sidebar({ setSession }: SidebarProps) {
               </div>
 
               <div className={'nav-group-items' + (aberto ? ' open' : '')}>
-                {group.items.map((item) => (
+                {group.items.filter((item) => item.to !== '/financeiro/movimento' || podeVerMovimento).map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
