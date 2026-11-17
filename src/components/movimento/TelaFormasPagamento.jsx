@@ -13,65 +13,65 @@ import {
 /** Quantos grupos abrem sozinhos depois de pesquisar (acima disso começam recolhidos). */
 const GRUPOS_ABERTOS_AUTOMATICO = 8;
 
+const campoBusca = {
+  width: '100%', background: 'var(--input-bg)', border: '1px solid var(--line)', borderRadius: 8,
+  padding: '10px 14px 10px 40px', color: 'var(--text)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+};
+
 /**
- * Lista de marcação em popover (filiais e formas). Conjunto vazio = "todas". Esc e clique fora fecham.
+ * Lista de marcação: campo "Filtrar", "Selecionar todos" (vale para o que está visível) e cartões com checkbox.
+ * Tudo marcado = sem filtro; as opções vêm do backend, nunca de uma lista escrita na tela.
  */
-function MultiSelecao({ id, rotulo, opcoes, selecionados, onChange, todasTexto, plural }) {
-  const [aberto, setAberto] = useState(false);
+function ListaMarcacao({ id, titulo, placeholder, opcoes, selecionados, onChange }) {
   const [busca, setBusca] = useState('');
-  const raiz = useRef(null);
-  const botao = useRef(null);
-
-  useEffect(() => {
-    if (!aberto) return undefined;
-    const fora = (e) => { if (raiz.current && !raiz.current.contains(e.target)) setAberto(false); };
-    document.addEventListener('mousedown', fora);
-    return () => document.removeEventListener('mousedown', fora);
-  }, [aberto]);
-
-  const fechar = () => { setAberto(false); botao.current?.focus(); };
   const visiveis = opcoes.filter((o) => semAcento(o.rotulo).includes(semAcento(busca)));
+  const todasVisiveisMarcadas = visiveis.length > 0 && visiveis.every((o) => selecionados.has(o.valor));
+
+  const alternarTodas = () => {
+    const novo = new Set(selecionados);
+    visiveis.forEach((o) => { if (todasVisiveisMarcadas) novo.delete(o.valor); else novo.add(o.valor); });
+    onChange(novo);
+  };
   const alternar = (valor) => {
     const novo = new Set(selecionados);
     if (novo.has(valor)) novo.delete(valor); else novo.add(valor);
     onChange(novo);
   };
-  const resumo = selecionados.size === 0 ? todasTexto : `${selecionados.size} ${plural} selecionada(s)`;
 
   return (
-    <div className="field" ref={raiz} style={{ position: 'relative' }}
-      onKeyDown={(e) => { if (e.key === 'Escape' && aberto) { e.stopPropagation(); fechar(); } }}>
-      <label htmlFor={id}>{rotulo}</label>
-      <button id={id} ref={botao} type="button" className="btn" aria-haspopup="listbox" aria-expanded={aberto}
-        onClick={() => setAberto((v) => !v)}
-        style={{ width: '100%', justifyContent: 'space-between', display: 'flex', alignItems: 'center' }}>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumo}</span>
-        <ChevronDown size={14} />
-      </button>
-      {aberto && (
-        <div role="group" aria-label={rotulo} style={{
-          position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 4, background: 'var(--panel)',
-          border: '1px solid var(--line)', borderRadius: 10, padding: 10, boxShadow: '0 8px 24px rgba(0,0,0,.25)',
-        }}>
-          <input type="search" aria-label={`Filtrar ${plural}s`} placeholder="Filtrar…" value={busca}
-            onChange={(e) => setBusca(e.target.value)} autoFocus style={{ width: '100%', marginBottom: 8 }} />
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <button type="button" className="btn sm" onClick={() => onChange(new Set(visiveis.map((o) => o.valor)))}>
-              Marcar visíveis
-            </button>
-            <button type="button" className="btn sm" onClick={() => onChange(new Set())}>Limpar (todas)</button>
-          </div>
-          <div style={{ maxHeight: 240, overflowY: 'auto' }}>
-            {visiveis.length === 0 && <div style={{ color: 'var(--text-faint)', fontSize: 13 }}>Nenhuma opção.</div>}
+    <div role="group" aria-labelledby={`${id}-titulo`}>
+      <div id={`${id}-titulo`} style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-faint)', marginBottom: 8 }}>
+        {titulo}: <span style={{ fontWeight: 400 }}>({selecionados.size} de {opcoes.length} marcada(s))</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={15} color="var(--text-faint)" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
+          <input id={id} type="text" aria-label={placeholder} placeholder={placeholder} value={busca}
+            onChange={(e) => setBusca(e.target.value)} style={campoBusca} />
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={todasVisiveisMarcadas} onChange={alternarTodas}
+            disabled={visiveis.length === 0} style={{ accentColor: 'var(--accent)', width: 15, height: 15 }} />
+          Selecionar todos
+        </label>
+        {opcoes.length === 0 ? (
+          <div style={{ color: 'var(--text-faint)', fontSize: 13 }}>Nenhuma opção disponível.</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10, maxHeight: 280, overflowY: 'auto', paddingRight: 4 }}>
             {visiveis.map((o) => (
-              <label key={o.valor} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 2px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={selecionados.has(o.valor)} onChange={() => alternar(o.valor)} />
-                <span>{o.rotulo}</span>
+              <label key={o.valor} style={{
+                display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--text)', cursor: 'pointer',
+                background: 'var(--input-bg)', border: '1px solid var(--line)', borderRadius: 8, padding: '10px 14px',
+              }}>
+                <input type="checkbox" checked={selecionados.has(o.valor)} onChange={() => alternar(o.valor)}
+                  style={{ accentColor: 'var(--accent)', width: 14, height: 14, flexShrink: 0 }} />
+                <span title={o.rotulo} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.rotulo}</span>
               </label>
             ))}
+            {visiveis.length === 0 && <div style={{ color: 'var(--text-faint)', fontSize: 13 }}>Nenhuma opção encontrada.</div>}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -177,23 +177,42 @@ export default function TelaFormasPagamento({ onVoltar }) {
   useEffect(() => { carregarOpcoes(); }, []);
 
   const filiais = useMemo(() => opcoes?.filiais ?? [], [opcoes]);
-  const { ufs, semUf } = useMemo(() => ufsDasFiliais(filiais), [filiais]);
-  const filiaisDaUf = useMemo(() => filiais.filter((f) => filialDaUf(f, uf)), [filiais, uf]);
-  const opcoesFiliais = useMemo(
-    () => filiaisDaUf.map((f) => ({ valor: f.id, rotulo: f.nome })), [filiaisDaUf]);
+  const opcoesFiliais = useMemo(() => filiais.map((f) => ({ valor: f.id, rotulo: f.nome })), [filiais]);
   const opcoesFormas = useMemo(
     () => (opcoes?.formas ?? []).map((f) => ({ valor: f.valor, rotulo: f.rotulo })), [opcoes]);
+  const { ufs, semUf } = useMemo(() => ufsDasFiliais(filiais), [filiais]);
+
+  // Ao carregar as opções (e ao limpar) vem tudo marcado: tudo marcado = sem filtro.
+  const marcarTudo = (lista) => {
+    setUf('');
+    setFiliaisSel(new Set(lista.filiais.map((f) => f.id)));
+    setFormasSel(new Set(lista.formas.map((f) => f.valor)));
+  };
+  useEffect(() => { if (opcoes) marcarTudo(opcoes); }, [opcoes]);
+
+  // A UF é um atalho: marca só as filiais dela (ou todas, sem UF). Marcar à mão desfaz o atalho.
+  const escolherUf = (valor) => {
+    setUf(valor);
+    setFiliaisSel(new Set(filiais.filter((f) => filialDaUf(f, valor)).map((f) => f.id)));
+  };
+  const marcarFiliais = (novo) => { setUf(''); setFiliaisSel(novo); };
 
   const erroPeriodo = validarPeriodo(dataInicio, dataFim);
-  // Sem filial marcada, a UF escolhida restringe as filiais; sem UF nem filial, vale o escopo todo do usuário.
-  const filialIds = filiaisSel.size > 0 ? [...filiaisSel] : (uf ? filiaisDaUf.map((f) => f.id) : []);
-  const filtros = { dataInicio, dataFim, agruparPor, filialIds, formas: [...formasSel] };
-  const semFiliaisNaUf = Boolean(uf) && filiaisDaUf.length === 0;
+  const semFilial = opcoesFiliais.length > 0 && filiaisSel.size === 0;
+  const semForma = opcoesFormas.length > 0 && formasSel.size === 0;
+  const erroSelecao = (semFilial && 'Marque ao menos uma filial.') || (semForma && 'Marque ao menos uma forma de pagamento.') || '';
+  const erroFiltros = erroPeriodo || erroSelecao;
+  const filtros = {
+    dataInicio,
+    dataFim,
+    agruparPor,
+    filialIds: filiaisSel.size === opcoesFiliais.length ? [] : [...filiaisSel],
+    formas: formasSel.size === opcoesFormas.length ? [] : [...formasSel],
+  };
 
   const pesquisar = async () => {
     if (pesquisando.current) return;
-    if (erroPeriodo) { showToast(erroPeriodo, true); return; }
-    if (semFiliaisNaUf) { showToast('Nenhuma filial nessa UF.', true); return; }
+    if (erroFiltros) { showToast(erroFiltros, true); return; }
     pesquisando.current = true;
     setCarregando(true);
     setErro('');
@@ -212,7 +231,7 @@ export default function TelaFormasPagamento({ onVoltar }) {
 
   const exportar = async (formato) => {
     if (exportandoAgora.current) return;
-    if (erroPeriodo) { showToast(erroPeriodo, true); return; }
+    if (erroFiltros) { showToast(erroFiltros, true); return; }
     exportandoAgora.current = true;
     setExportando(formato);
     try {
@@ -230,9 +249,7 @@ export default function TelaFormasPagamento({ onVoltar }) {
     setAgruparPor('FILIAL');
     setDataInicio(hoje());
     setDataFim(hoje());
-    setUf('');
-    setFiliaisSel(new Set());
-    setFormasSel(new Set());
+    if (opcoes) marcarTudo(opcoes);
     setRelatorio(null);
     setErro('');
   };
@@ -264,9 +281,11 @@ export default function TelaFormasPagamento({ onVoltar }) {
           <div role="alert" style={{ color: 'var(--bad)' }}>
             {erroOpcoes} <button type="button" className="btn sm" onClick={carregarOpcoes}>Tentar de novo</button>
           </div>
+        ) : !opcoes ? (
+          <div style={{ color: 'var(--text-faint)' }}>Carregando filtros…</div>
         ) : (
           <>
-            <div className="section-label">Filtros</div>
+            <div className="section-label">Filtros Principais</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 16 }}>
               <div className="field">
                 <label htmlFor="fp-agrupar">Agrupar por</label>
@@ -283,25 +302,24 @@ export default function TelaFormasPagamento({ onVoltar }) {
                 <input id="fp-fim" type="date" value={dataFim} min={dataInicio} onChange={(e) => setDataFim(e.target.value)} />
               </div>
               <div className="field">
-                <label htmlFor="fp-uf">UF</label>
-                <select id="fp-uf" value={uf} onChange={(e) => { setUf(e.target.value); setFiliaisSel(new Set()); }}>
+                <label htmlFor="fp-uf">UF (marca as filiais dela)</label>
+                <select id="fp-uf" value={uf} onChange={(e) => escolherUf(e.target.value)}>
                   <option value="">Todas as UFs</option>
                   {ufs.map((u) => <option key={u} value={u}>{u}</option>)}
                   {semUf && <option value={SEM_UF}>Sem UF no nome</option>}
                 </select>
               </div>
-              <MultiSelecao id="fp-filiais" rotulo="Filiais / PDVs" opcoes={opcoesFiliais} selecionados={filiaisSel}
-                onChange={setFiliaisSel} todasTexto={uf ? 'Todas da UF' : 'Todas as filiais'} plural="filial" />
-              <MultiSelecao id="fp-formas" rotulo="Formas de pagamento" opcoes={opcoesFormas} selecionados={formasSel}
-                onChange={setFormasSel} todasTexto="Todas as formas" plural="forma" />
             </div>
-            {erroPeriodo && <div role="alert" style={{ color: 'var(--bad)', fontSize: 13 }}>{erroPeriodo}</div>}
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button type="button" className="btn solid" onClick={pesquisar}
-                disabled={!opcoes || ocupado || Boolean(erroPeriodo)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Search size={15} /> {carregando ? 'Pesquisando…' : 'Pesquisar'}
-              </button>
+            <ListaMarcacao id="fp-filiais" titulo="Filiais / PDVs" placeholder="Filtrar filiais" opcoes={opcoesFiliais}
+              selecionados={filiaisSel} onChange={marcarFiliais} />
+            <ListaMarcacao id="fp-formas" titulo="Forma de Pagamento" placeholder="Filtrar opções" opcoes={opcoesFormas}
+              selecionados={formasSel} onChange={setFormasSel} />
+
+            {erroFiltros && <div role="alert" style={{ color: 'var(--bad)', fontSize: 13 }}>{erroFiltros}</div>}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap', alignItems: 'center',
+              borderTop: '1px solid var(--line)', paddingTop: 20 }}>
               <button type="button" className="btn" onClick={limpar} disabled={ocupado}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <RotateCcw size={15} /> Limpar
@@ -309,10 +327,14 @@ export default function TelaFormasPagamento({ onVoltar }) {
               <span style={{ flex: 1 }} />
               {[['xlsx', 'Excel', FileSpreadsheet], ['pdf', 'PDF', FileText], ['csv', 'CSV', FileText]].map(([formato, rotulo, Icone]) => (
                 <button key={formato} type="button" className="btn" onClick={() => exportar(formato)}
-                  disabled={!opcoes || ocupado || Boolean(erroPeriodo)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  disabled={ocupado || Boolean(erroFiltros)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Icone size={15} /> {exportando === formato ? 'Gerando…' : rotulo}
                 </button>
               ))}
+              <button type="button" className="btn solid" onClick={pesquisar} disabled={ocupado || Boolean(erroFiltros)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Search size={15} /> {carregando ? 'Pesquisando…' : 'Pesquisar'}
+              </button>
             </div>
           </>
         )}
