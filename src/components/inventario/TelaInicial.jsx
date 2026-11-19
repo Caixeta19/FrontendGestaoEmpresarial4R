@@ -23,7 +23,9 @@ export default function TelaInicial({ onAbrir }) {
   const [carregando, setCarregando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
+  const [mb52, setMb52] = useState(null);
   const inputArquivo = useRef(null);
+  const inputMb52 = useRef(null);
   const inputCentros = useRef(null);
 
   const carregarFiliais = useCallback(() => {
@@ -58,8 +60,10 @@ export default function TelaInicial({ onAbrir }) {
     setErro('');
     setEnviando(true);
     try {
-      const resumo = await api.abrir(filialId, arquivo);
-      showToast(`Inventário #${resumo.execucaoId} aberto: ${resumo.totais.esperados} seriais esperados.`);
+      const resumo = await api.abrir(filialId, arquivo, mb52);
+      const daMb52 = resumo.mb52?.importada ? ` MB52 com ${resumo.mb52.linhasDaFilial} linha(s) da filial.` : '';
+      showToast(`Inventário #${resumo.execucaoId} aberto: ${resumo.totais.esperados} seriais esperados.${daMb52}`);
+      setMb52(null);
       onAbrir(resumo.execucaoId);
     } catch (err) {
       setErro(err.mensagem || 'Falha ao abrir o inventário.');
@@ -92,7 +96,7 @@ export default function TelaInicial({ onAbrir }) {
       <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h1 style={{ margin: 0 }}>Inventário Estoque</h1>
-          <div className="sub">IQ09 do SAP × estoque do sistema × contagem física por bipagem</div>
+          <div className="sub">IQ09 do SAP × estoque do sistema × contagem física por bipagem; MB52 opcional para conferir por SKU</div>
         </div>
         <div className="topbar-actions">
           <button type="button" className="btn sm ghost" onClick={() => inputCentros.current?.click()} title="CSV ADABAS;CENTRO_SAP">
@@ -131,7 +135,23 @@ export default function TelaInicial({ onAbrir }) {
                 <FileSpreadsheet size={16} /> {enviando ? 'Importando a IQ09...' : 'Novo inventário (IQ09)'}
               </button>
             )}
+            {!aberta && (
+              <>
+                <button type="button" className="btn ghost" disabled={!filial.centroSap || enviando}
+                  onClick={() => inputMb52.current?.click()} title="Opcional: MB52 do SAP (.xlsx) para conferir por SKU">
+                  <UploadCloud size={16} /> {mb52 ? 'Trocar MB52' : 'Anexar MB52 (opcional)'}
+                </button>
+                {mb52 && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-dim)' }}>
+                    MB52: <b>{mb52.name}</b>
+                    <button type="button" className="btn sm ghost" onClick={() => setMb52(null)} disabled={enviando}>Remover</button>
+                  </span>
+                )}
+              </>
+            )}
             <input ref={inputArquivo} type="file" accept=".xlsx,.xls,.csv,.txt" style={{ display: 'none' }} onChange={novoInventario} />
+            <input ref={inputMb52} type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setMb52(f); }} />
           </div>
         )}
 

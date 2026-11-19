@@ -6,6 +6,7 @@ import LeitorCamera from './LeitorCamera.jsx';
 import ModalFechamento from './ModalFechamento.jsx';
 import { beep } from './beep';
 import { BadgeResultado, BadgeStatus, Kpi } from './comuns.jsx';
+import AbaSkuMb52 from './AbaSkuMb52.jsx';
 
 const TAMANHO_PAGINA = 50;
 const ATUALIZACAO_MS = 15000;
@@ -43,6 +44,9 @@ export default function TelaContagem({ execucaoId, onVoltar }) {
   const [camera, setCamera] = useState(false);
   const [fechando, setFechando] = useState(false);
   const [diagnosticando, setDiagnosticando] = useState(false);
+  const [visao, setVisao] = useState('SERIAL');
+  // Sobe a cada atualização do resumo (bipagem, desfazer, intervalo): a aba por SKU recarrega junto.
+  const [versaoSku, setVersaoSku] = useState(0);
   const campoRef = useRef(null);
   const recarregarTimer = useRef(null);
   const primeiraCarga = useRef(true);
@@ -54,6 +58,7 @@ export default function TelaContagem({ execucaoId, onVoltar }) {
     try {
       const r = await api.buscar(execucaoId, { resultados: abaAtual.resultados, busca: buscaAplicada, pagina, tamanho: TAMANHO_PAGINA });
       setResumo(r);
+      setVersaoSku((v) => v + 1);
       setErro('');
       // Inventário já fechado: abre direto nas divergências.
       if (primeiraCarga.current) {
@@ -223,6 +228,18 @@ export default function TelaContagem({ execucaoId, onVoltar }) {
         )}
       </div>
 
+      {/* Por serial x por SKU (MB52) */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} role="tablist" aria-label="Visão do inventário">
+        <button type="button" role="tab" aria-selected={visao === 'SERIAL'} className={`btn sm ${visao === 'SERIAL' ? 'solid' : 'ghost'}`}
+          onClick={() => setVisao('SERIAL')}>
+          Por serial (IQ09)
+        </button>
+        <button type="button" role="tab" aria-selected={visao === 'SKU'} className={`btn sm ${visao === 'SKU' ? 'solid' : 'ghost'}`}
+          onClick={() => setVisao('SKU')}>
+          Por SKU (MB52){resumo.mb52?.importada ? '' : ' · não importada'}
+        </button>
+      </div>
+
       {/* Bipagem */}
       {contando && (
         <div className="panel" style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -319,7 +336,18 @@ export default function TelaContagem({ execucaoId, onVoltar }) {
         </div>
       )}
 
+      {visao === 'SKU' && (
+        <AbaSkuMb52
+          execucaoId={execucaoId}
+          mb52={resumo.mb52}
+          contando={contando}
+          versao={versaoSku}
+          onMb52Importada={carregar}
+        />
+      )}
+
       {/* Tabela */}
+      {visao === 'SERIAL' && (
       <div className="panel" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -407,6 +435,7 @@ export default function TelaContagem({ execucaoId, onVoltar }) {
           </div>
         )}
       </div>
+      )}
 
       {erro && <span role="alert" style={{ color: 'var(--bad)', fontSize: 13 }}>{erro}</span>}
 
